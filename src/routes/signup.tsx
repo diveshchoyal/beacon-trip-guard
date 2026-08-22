@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { motion } from "framer-motion";
 import { toast } from "sonner";
 
 import logo from "@/assets/beacon-logo.png";
@@ -26,14 +25,8 @@ export const Route = createFileRoute("/signup")({
   component: SignupPage,
 });
 
-const roles = [
-  { value: "tourist", label: "Tourist" },
-  { value: "police", label: "Police / Admin" },
-] as const;
-
 function SignupPage() {
   const navigate = useNavigate();
-  const [role, setRole] = useState<"tourist" | "police">("tourist");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +44,7 @@ function SignupPage() {
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { full_name: fullName.trim(), role },
+        data: { full_name: fullName.trim() },
       },
     });
     setBusy(false);
@@ -65,7 +58,7 @@ function SignupPage() {
       return;
     }
     toast.success("Account created");
-    navigate({ to: role === "police" ? "/dashboard" : "/app", replace: true });
+    navigate({ to: "/app", replace: true });
   };
 
   return (
@@ -90,35 +83,6 @@ function SignupPage() {
           <p className="mt-1 text-center text-sm text-muted-foreground">
             Safe Travel. Smart Response.
           </p>
-
-          <div className="mt-7">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              I am a
-            </span>
-            <div className="glass relative flex gap-1 rounded-2xl p-1">
-              {roles.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  onClick={() => setRole(r.value)}
-                  className="relative flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-foreground"
-                >
-                  {role === r.value && (
-                    <motion.span
-                      layoutId="role-pill"
-                      className="absolute inset-0 rounded-xl bg-primary"
-                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    />
-                  )}
-                  <span
-                    className={`relative ${role === r.value ? "text-primary-foreground" : "text-muted-foreground"}`}
-                  >
-                    {r.label}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
 
           <form onSubmit={onSubmit} className="mt-5 space-y-4">
             <Field label="Full name" value={fullName} onChange={setFullName} placeholder="Asha Rao" />

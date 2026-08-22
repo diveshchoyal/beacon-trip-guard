@@ -11,9 +11,9 @@ export const Route = createFileRoute("/_authenticated/app/map")({
 });
 
 const legend = [
-  { label: "Low risk", color: "#5E9E7E" },
-  { label: "Medium risk", color: "#C9A574" },
-  { label: "High risk", color: "#C0483C" },
+  { label: "Safe", color: "#3F9E6E" },
+  { label: "Caution", color: "#D7A93F" },
+  { label: "Restricted", color: "#C0483C" },
 ];
 
 function TouristMap() {
@@ -34,7 +34,7 @@ function TouristMap() {
           <BeaconMap
             zones={zones}
             center={[effective.lat, effective.lng]}
-            zoom={12}
+            zoom={13}
             pins={[
               {
                 id: "me",

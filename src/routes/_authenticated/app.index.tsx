@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Fingerprint, Map as MapIcon, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Fingerprint, Map as MapIcon, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useGeolocation, pointInPolygon } from "@/hooks/use-geolocation";
+import { useGeolocation, inZone } from "@/hooks/use-geolocation";
 import { GlassCard, RiskBadge } from "@/components/ui/glass";
 
 export const Route = createFileRoute("/_authenticated/app/")({
@@ -19,6 +19,7 @@ function TouristHome() {
   const { effective, coords, error } = useGeolocation();
   const queryClient = useQueryClient();
   const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
 
   const { data: zones = [] } = useQuery({
     queryKey: ["zones"],
@@ -30,14 +31,14 @@ function TouristHome() {
   });
 
   const currentZone = useMemo(
-    () => zones.find((z) => pointInPolygon(effective, z.polygon)),
+    () => zones.find((z) => inZone(effective, z)),
     [zones, effective],
   );
 
-  const risk = currentZone?.risk_level ?? "low";
+  const risk = currentZone?.risk_level ?? "safe";
   const score = Math.max(
     35,
-    (profile?.safety_score ?? 85) - (risk === "high" ? 30 : risk === "medium" ? 12 : 0),
+    (profile?.safety_score ?? 85) - (risk === "restricted" ? 30 : risk === "caution" ? 12 : 0),
   );
 
   // Persist a location ping every 2 minutes so responders see live position.
@@ -65,14 +66,16 @@ function TouristHome() {
       toast.error(e.message);
       return;
     }
-    toast.success("SOS sent — responders have your location.");
+    toast.success("Alert sent — help is on the way");
+    setSent(true);
+    window.setTimeout(() => setSent(false), 8000);
     void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
   };
 
   const toneClass =
-    risk === "high"
+    risk === "restricted"
       ? "text-[var(--danger)]"
-      : risk === "medium"
+      : risk === "caution"
         ? "text-[var(--caution)]"
         : "text-[var(--safe)]";
 
@@ -92,9 +95,9 @@ function TouristHome() {
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-foreground">Safety score</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {risk === "high"
-                ? "You are inside a high-risk zone. Stay alert and keep to marked paths."
-                : risk === "medium"
+              {risk === "restricted"
+                ? "You are inside a restricted zone. Stay alert and keep to marked paths."
+                : risk === "caution"
                   ? "Moderate risk area — patchy coverage. Share your plan with someone."
                   : "You are in a well-monitored area. Enjoy your trip."}
             </p>
@@ -134,9 +137,20 @@ function TouristHome() {
             <span className="mt-1 block text-2xl font-bold tracking-widest">SOS</span>
           </span>
         </motion.button>
-        <p className="mt-6 max-w-xs text-center text-xs text-muted-foreground">
-          {sending ? "Sending…" : "Hold your phone steady and tap once. Your live location is attached."}
-        </p>
+        {sent ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 flex items-center gap-2 rounded-2xl bg-[var(--safe)]/15 px-4 py-3 text-sm font-semibold text-[var(--safe)]"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            Alert sent — help is on the way
+          </motion.div>
+        ) : (
+          <p className="mt-6 max-w-xs text-center text-xs text-muted-foreground">
+            {sending ? "Sending…" : "Hold your phone steady and tap once. Your live location is attached."}
+          </p>
+        )}
       </GlassCard>
 
       <div className="grid gap-4 sm:grid-cols-2">

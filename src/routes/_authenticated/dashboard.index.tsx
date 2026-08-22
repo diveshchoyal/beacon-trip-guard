@@ -75,7 +75,7 @@ function LiveMap() {
       tone: "alert" as const,
     }));
 
-  const first = alertPins[0] ?? touristPins[0];
+  const first = alertPins[0];
   const center: [number, number] = first
     ? [first.lat, first.lng]
     : [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng];
@@ -90,7 +90,7 @@ function LiveMap() {
 
       <GlassCard className="overflow-hidden p-0">
         <div className="h-[65vh] min-h-[420px] w-full">
-          <BeaconMap zones={zones} pins={[...touristPins, ...alertPins]} center={center} zoom={11} />
+          <BeaconMap zones={zones} pins={[...touristPins, ...alertPins]} center={center} zoom={12} />
         </div>
       </GlassCard>
     </div>

@@ -17,6 +17,7 @@ import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/ap
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAlertsRouteImport } from './routes/_authenticated/app.alerts'
+import { Route as AuthenticatedAppIdRouteImport } from './routes/_authenticated/app.id'
 import { Route as AuthenticatedAppMapRouteImport } from './routes/_authenticated/app.map'
 import { Route as AuthenticatedAppProfileRouteImport } from './routes/_authenticated/app.profile'
 
@@ -59,6 +60,11 @@ const AuthenticatedAppAlertsRoute = AuthenticatedAppAlertsRouteImport.update({
   path: '/alerts',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppIdRoute = AuthenticatedAppIdRouteImport.update({
+  id: '/id',
+  path: '/id',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
 const AuthenticatedAppMapRoute = AuthenticatedAppMapRouteImport.update({
   id: '/map',
   path: '/map',
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/app/alerts': typeof AuthenticatedAppAlertsRoute
+  '/app/id': typeof AuthenticatedAppIdRoute
   '/app/map': typeof AuthenticatedAppMapRoute
   '/app/profile': typeof AuthenticatedAppProfileRoute
   '/app/': typeof AuthenticatedAppIndexRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/app/alerts': typeof AuthenticatedAppAlertsRoute
+  '/app/id': typeof AuthenticatedAppIdRoute
   '/app/map': typeof AuthenticatedAppMapRoute
   '/app/profile': typeof AuthenticatedAppProfileRoute
   '/app': typeof AuthenticatedAppIndexRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/app/alerts': typeof AuthenticatedAppAlertsRoute
+  '/_authenticated/app/id': typeof AuthenticatedAppIdRoute
   '/_authenticated/app/map': typeof AuthenticatedAppMapRoute
   '/_authenticated/app/profile': typeof AuthenticatedAppProfileRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
@@ -113,6 +122,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/dashboard'
     | '/app/alerts'
+    | '/app/id'
     | '/app/map'
     | '/app/profile'
     | '/app/'
@@ -123,6 +133,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/dashboard'
     | '/app/alerts'
+    | '/app/id'
     | '/app/map'
     | '/app/profile'
     | '/app'
@@ -135,6 +146,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app'
     | '/_authenticated/dashboard'
     | '/_authenticated/app/alerts'
+    | '/_authenticated/app/id'
     | '/_authenticated/app/map'
     | '/_authenticated/app/profile'
     | '/_authenticated/app/'
@@ -205,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAlertsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/id': {
+      id: '/_authenticated/app/id'
+      path: '/id'
+      fullPath: '/app/id'
+      preLoaderRoute: typeof AuthenticatedAppIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/map': {
       id: '/_authenticated/app/map'
       path: '/map'
@@ -224,6 +243,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAlertsRoute: typeof AuthenticatedAppAlertsRoute
+  AuthenticatedAppIdRoute: typeof AuthenticatedAppIdRoute
   AuthenticatedAppMapRoute: typeof AuthenticatedAppMapRoute
   AuthenticatedAppProfileRoute: typeof AuthenticatedAppProfileRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
@@ -231,6 +251,7 @@ interface AuthenticatedAppRouteChildren {
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAlertsRoute: AuthenticatedAppAlertsRoute,
+  AuthenticatedAppIdRoute: AuthenticatedAppIdRoute,
   AuthenticatedAppMapRoute: AuthenticatedAppMapRoute,
   AuthenticatedAppProfileRoute: AuthenticatedAppProfileRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,

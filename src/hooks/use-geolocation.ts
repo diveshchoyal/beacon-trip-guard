@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 export type Coords = { lat: number; lng: number };
 
-export const DEFAULT_CENTER: Coords = { lat: 25.5788, lng: 91.8933 };
+/** Chennai, India — default map centre. */
+export const DEFAULT_CENTER: Coords = { lat: 13.0827, lng: 80.2707 };
 
 export function useGeolocation() {
   const [coords, setCoords] = useState<Coords | null>(null);
@@ -27,20 +28,22 @@ export function useGeolocation() {
   return { coords, error, effective: coords ?? DEFAULT_CENTER };
 }
 
-/** Ray-casting point-in-polygon for [lat,lng] rings. */
-export function pointInPolygon(point: Coords, polygon: unknown): boolean {
-  if (!Array.isArray(polygon)) return false;
-  const ring = polygon.filter((p): p is [number, number] => Array.isArray(p) && p.length === 2);
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const yi = Number(ring[i]![0]);
-    const xi = Number(ring[i]![1]);
-    const yj = Number(ring[j]![0]);
-    const xj = Number(ring[j]![1]);
-    const intersect =
-      yi > point.lat !== yj > point.lat &&
-      point.lng < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
+/** Great-circle distance in metres between two coordinates. */
+export function distanceMeters(a: Coords, b: Coords): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+/** True when the point falls inside a circular geofence zone. */
+export function inZone(
+  point: Coords,
+  zone: { center_lat: number; center_lng: number; radius_m: number },
+): boolean {
+  return distanceMeters(point, { lat: zone.center_lat, lng: zone.center_lng }) <= zone.radius_m;
 }

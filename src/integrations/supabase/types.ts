@@ -14,16 +14,260 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alerts: {
+        Row: {
+          created_at: string
+          id: string
+          lat: number | null
+          lng: number | null
+          message: string | null
+          status: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          message?: string | null
+          status?: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          message?: string | null
+          status?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      digital_ids: {
+        Row: {
+          created_at: string
+          destination: string
+          digital_id: string
+          emergency_contact: string
+          hash: string
+          id: string
+          id_number: string
+          qr_payload: string
+          status: string
+          trip_end: string
+          trip_start: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          destination: string
+          digital_id: string
+          emergency_contact: string
+          hash: string
+          id?: string
+          id_number: string
+          qr_payload: string
+          status?: string
+          trip_end: string
+          trip_start: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          destination?: string
+          digital_id?: string
+          emergency_contact?: string
+          hash?: string
+          id?: string
+          id_number?: string
+          qr_payload?: string
+          status?: string
+          trip_end?: string
+          trip_start?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      efir_records: {
+        Row: {
+          alert_id: string | null
+          created_at: string
+          details: string | null
+          fir_number: string
+          id: string
+          officer_id: string | null
+          status: string
+          tourist_id: string | null
+        }
+        Insert: {
+          alert_id?: string | null
+          created_at?: string
+          details?: string | null
+          fir_number: string
+          id?: string
+          officer_id?: string | null
+          status?: string
+          tourist_id?: string | null
+        }
+        Update: {
+          alert_id?: string | null
+          created_at?: string
+          details?: string | null
+          fir_number?: string
+          id?: string
+          officer_id?: string | null
+          status?: string
+          tourist_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "efir_records_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      geofence_zones: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          polygon: Json
+          risk_level: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          polygon: Json
+          risk_level?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          polygon?: Json
+          risk_level?: string
+        }
+        Relationships: []
+      }
+      id_ledger: {
+        Row: {
+          action: string
+          created_at: string
+          digital_id: string
+          hash: string
+          id: string
+          prev_hash: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          digital_id: string
+          hash: string
+          id?: string
+          prev_hash?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          digital_id?: string
+          hash?: string
+          id?: string
+          prev_hash?: string | null
+        }
+        Relationships: []
+      }
+      location_pings: {
+        Row: {
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lat: number
+          lng: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          phone: string | null
+          safety_score: number
+        }
+        Insert: {
+          created_at?: string
+          full_name?: string
+          id: string
+          phone?: string | null
+          safety_score?: number
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          phone?: string | null
+          safety_score?: number
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "tourist" | "police"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +394,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["tourist", "police"],
+    },
   },
 } as const

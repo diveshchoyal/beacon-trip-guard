@@ -20,6 +20,10 @@ import { Route as AuthenticatedAppAlertsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAppIdRouteImport } from './routes/_authenticated/app.id'
 import { Route as AuthenticatedAppMapRouteImport } from './routes/_authenticated/app.map'
 import { Route as AuthenticatedAppProfileRouteImport } from './routes/_authenticated/app.profile'
+import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard.index'
+import { Route as AuthenticatedDashboardAlertsRouteImport } from './routes/_authenticated/dashboard.alerts'
+import { Route as AuthenticatedDashboardEfirRouteImport } from './routes/_authenticated/dashboard.efir'
+import { Route as AuthenticatedDashboardRegistryRouteImport } from './routes/_authenticated/dashboard.registry'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -75,29 +79,60 @@ const AuthenticatedAppProfileRoute = AuthenticatedAppProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedDashboardIndexRoute =
+  AuthenticatedDashboardIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardAlertsRoute =
+  AuthenticatedDashboardAlertsRouteImport.update({
+    id: '/alerts',
+    path: '/alerts',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardEfirRoute =
+  AuthenticatedDashboardEfirRouteImport.update({
+    id: '/efir',
+    path: '/efir',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
+const AuthenticatedDashboardRegistryRoute =
+  AuthenticatedDashboardRegistryRouteImport.update({
+    id: '/registry',
+    path: '/registry',
+    getParentRoute: () => AuthenticatedDashboardRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
-  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/app/alerts': typeof AuthenticatedAppAlertsRoute
   '/app/id': typeof AuthenticatedAppIdRoute
   '/app/map': typeof AuthenticatedAppMapRoute
   '/app/profile': typeof AuthenticatedAppProfileRoute
+  '/dashboard/alerts': typeof AuthenticatedDashboardAlertsRoute
+  '/dashboard/efir': typeof AuthenticatedDashboardEfirRoute
+  '/dashboard/registry': typeof AuthenticatedDashboardRegistryRoute
   '/app/': typeof AuthenticatedAppIndexRoute
+  '/dashboard/': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
   '/app/alerts': typeof AuthenticatedAppAlertsRoute
   '/app/id': typeof AuthenticatedAppIdRoute
   '/app/map': typeof AuthenticatedAppMapRoute
   '/app/profile': typeof AuthenticatedAppProfileRoute
+  '/dashboard/alerts': typeof AuthenticatedDashboardAlertsRoute
+  '/dashboard/efir': typeof AuthenticatedDashboardEfirRoute
+  '/dashboard/registry': typeof AuthenticatedDashboardRegistryRoute
   '/app': typeof AuthenticatedAppIndexRoute
+  '/dashboard': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -106,12 +141,16 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteWithChildren
   '/_authenticated/app/alerts': typeof AuthenticatedAppAlertsRoute
   '/_authenticated/app/id': typeof AuthenticatedAppIdRoute
   '/_authenticated/app/map': typeof AuthenticatedAppMapRoute
   '/_authenticated/app/profile': typeof AuthenticatedAppProfileRoute
+  '/_authenticated/dashboard/alerts': typeof AuthenticatedDashboardAlertsRoute
+  '/_authenticated/dashboard/efir': typeof AuthenticatedDashboardEfirRoute
+  '/_authenticated/dashboard/registry': typeof AuthenticatedDashboardRegistryRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
+  '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -125,18 +164,25 @@ export interface FileRouteTypes {
     | '/app/id'
     | '/app/map'
     | '/app/profile'
+    | '/dashboard/alerts'
+    | '/dashboard/efir'
+    | '/dashboard/registry'
     | '/app/'
+    | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/signup'
-    | '/dashboard'
     | '/app/alerts'
     | '/app/id'
     | '/app/map'
     | '/app/profile'
+    | '/dashboard/alerts'
+    | '/dashboard/efir'
+    | '/dashboard/registry'
     | '/app'
+    | '/dashboard'
   id:
     | '__root__'
     | '/'
@@ -149,7 +195,11 @@ export interface FileRouteTypes {
     | '/_authenticated/app/id'
     | '/_authenticated/app/map'
     | '/_authenticated/app/profile'
+    | '/_authenticated/dashboard/alerts'
+    | '/_authenticated/dashboard/efir'
+    | '/_authenticated/dashboard/registry'
     | '/_authenticated/app/'
+    | '/_authenticated/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -238,6 +288,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppProfileRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/dashboard/': {
+      id: '/_authenticated/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof AuthenticatedDashboardIndexRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
+    '/_authenticated/dashboard/alerts': {
+      id: '/_authenticated/dashboard/alerts'
+      path: '/alerts'
+      fullPath: '/dashboard/alerts'
+      preLoaderRoute: typeof AuthenticatedDashboardAlertsRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
+    '/_authenticated/dashboard/efir': {
+      id: '/_authenticated/dashboard/efir'
+      path: '/efir'
+      fullPath: '/dashboard/efir'
+      preLoaderRoute: typeof AuthenticatedDashboardEfirRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
+    '/_authenticated/dashboard/registry': {
+      id: '/_authenticated/dashboard/registry'
+      path: '/registry'
+      fullPath: '/dashboard/registry'
+      preLoaderRoute: typeof AuthenticatedDashboardRegistryRouteImport
+      parentRoute: typeof AuthenticatedDashboardRoute
+    }
   }
 }
 
@@ -260,14 +338,34 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
 const AuthenticatedAppRouteWithChildren =
   AuthenticatedAppRoute._addFileChildren(AuthenticatedAppRouteChildren)
 
+interface AuthenticatedDashboardRouteChildren {
+  AuthenticatedDashboardAlertsRoute: typeof AuthenticatedDashboardAlertsRoute
+  AuthenticatedDashboardEfirRoute: typeof AuthenticatedDashboardEfirRoute
+  AuthenticatedDashboardRegistryRoute: typeof AuthenticatedDashboardRegistryRoute
+  AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
+}
+
+const AuthenticatedDashboardRouteChildren: AuthenticatedDashboardRouteChildren =
+  {
+    AuthenticatedDashboardAlertsRoute: AuthenticatedDashboardAlertsRoute,
+    AuthenticatedDashboardEfirRoute: AuthenticatedDashboardEfirRoute,
+    AuthenticatedDashboardRegistryRoute: AuthenticatedDashboardRegistryRoute,
+    AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
+  }
+
+const AuthenticatedDashboardRouteWithChildren =
+  AuthenticatedDashboardRoute._addFileChildren(
+    AuthenticatedDashboardRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppRoute: typeof AuthenticatedAppRouteWithChildren
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppRoute: AuthenticatedAppRouteWithChildren,
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -6,7 +6,6 @@ import { LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { GlassCard, PressButton } from "@/components/ui/glass";
-import { ThemeToggle } from "@/components/theme-provider";
 import { useSignOut } from "@/components/layout/nav";
 import { Field } from "@/routes/login";
 
@@ -55,16 +54,6 @@ function ProfilePage() {
             {busy ? "Saving…" : "Save changes"}
           </PressButton>
         </form>
-      </GlassCard>
-
-      <GlassCard transition={{ delay: 0.05, duration: 0.3 }}>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">Appearance</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Switch between light and dark glass.</p>
-          </div>
-          <ThemeToggle />
-        </div>
       </GlassCard>
 
       <GlassCard transition={{ delay: 0.1, duration: 0.3 }}>

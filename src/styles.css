@@ -3,8 +3,6 @@
 @import "tw-animate-css";
 @import "leaflet/dist/leaflet.css";
 
-@custom-variant dark (&:is(.dark *));
-
 /*
  * BEACON design system — glassmorphism, warm cream / espresso palette.
  * Accents: dusty blush pink + warm sandal tan.
@@ -105,56 +103,6 @@
   --sidebar-ring: oklch(0.72 0.072 78);
 }
 
-.dark {
-  --background: oklch(0.19 0.012 55);
-  --foreground: oklch(0.964 0.011 85);
-
-  --card: oklch(0.24 0.014 55);
-  --card-foreground: oklch(0.964 0.011 85);
-  --popover: oklch(0.24 0.014 55);
-  --popover-foreground: oklch(0.964 0.011 85);
-
-  --primary: oklch(0.76 0.076 78);
-  --primary-foreground: oklch(0.19 0.012 55);
-  --secondary: oklch(0.815 0.058 12);
-  --secondary-foreground: oklch(0.19 0.012 55);
-
-  --muted: oklch(0.28 0.014 55);
-  --muted-foreground: oklch(0.76 0.018 70);
-  --accent: oklch(0.32 0.024 40);
-  --accent-foreground: oklch(0.964 0.011 85);
-
-  --destructive: oklch(0.66 0.16 25);
-  --destructive-foreground: oklch(0.964 0.011 85);
-
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.76 0.076 78);
-
-  --sand: oklch(0.76 0.076 78);
-  --blush: oklch(0.815 0.058 12);
-  --safe: oklch(0.72 0.1 152);
-  --caution: oklch(0.8 0.11 78);
-  --danger: oklch(0.68 0.16 25);
-
-  --glass-bg: rgba(255, 255, 255, 0.07);
-  --glass-border: rgba(255, 255, 255, 0.14);
-  --glass-shadow: 0 22px 50px -24px rgba(0, 0, 0, 0.85);
-  --glass-sheen: rgba(255, 255, 255, 0.28);
-  --page-gradient:
-    radial-gradient(120% 90% at 10% 0%, rgba(232, 180, 184, 0.16), transparent 60%),
-    radial-gradient(110% 80% at 92% 10%, rgba(201, 165, 116, 0.18), transparent 62%),
-    radial-gradient(90% 70% at 50% 100%, rgba(232, 180, 184, 0.1), transparent 65%);
-
-  --sidebar: rgba(255, 255, 255, 0.06);
-  --sidebar-foreground: oklch(0.964 0.011 85);
-  --sidebar-primary: oklch(0.76 0.076 78);
-  --sidebar-primary-foreground: oklch(0.19 0.012 55);
-  --sidebar-accent: oklch(0.32 0.024 40);
-  --sidebar-accent-foreground: oklch(0.964 0.011 85);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.76 0.076 78);
-}
 
 @layer base {
   * {

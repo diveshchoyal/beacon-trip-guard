@@ -135,27 +135,33 @@ export type Database = {
       }
       geofence_zones: {
         Row: {
+          center_lat: number
+          center_lng: number
           created_at: string
           description: string | null
           id: string
           name: string
-          polygon: Json
+          radius_m: number
           risk_level: string
         }
         Insert: {
+          center_lat: number
+          center_lng: number
           created_at?: string
           description?: string | null
           id?: string
           name: string
-          polygon: Json
+          radius_m: number
           risk_level?: string
         }
         Update: {
+          center_lat?: number
+          center_lng?: number
           created_at?: string
           description?: string | null
           id?: string
           name?: string
-          polygon?: Json
+          radius_m?: number
           risk_level?: string
         }
         Relationships: []
@@ -208,6 +214,30 @@ export type Database = {
           lat?: number
           lng?: number
           user_id?: string
+        }
+        Relationships: []
+      }
+      police_stations: {
+        Row: {
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lat: number
+          lng: number
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string
         }
         Relationships: []
       }

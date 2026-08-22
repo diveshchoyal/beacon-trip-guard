@@ -1,13 +1,13 @@
 import { useMemo } from "react";
-import { MapContainer, TileLayer, Polygon, Marker, Popup, Tooltip } from "react-leaflet";
+import { MapContainer, TileLayer, Circle, Marker, Popup, Tooltip } from "react-leaflet";
 import L from "leaflet";
 
 import type { Pin, Zone } from "./types";
 
-const riskColor: Record<string, string> = {
-  high: "#C0483C",
-  medium: "#C9A574",
-  low: "#5E9E7E",
+export const riskColor: Record<string, string> = {
+  restricted: "#C0483C",
+  caution: "#D7A93F",
+  safe: "#3F9E6E",
 };
 
 const pinColor: Record<Pin["tone"], string> = {
@@ -26,18 +26,11 @@ function makeIcon(tone: Pin["tone"]) {
   });
 }
 
-function toLatLngs(polygon: unknown): [number, number][] {
-  if (!Array.isArray(polygon)) return [];
-  return polygon
-    .filter((p): p is [number, number] => Array.isArray(p) && p.length === 2)
-    .map((p) => [Number(p[0]), Number(p[1])] as [number, number]);
-}
-
 export default function LeafletMap({
   zones,
   pins,
   center,
-  zoom = 11,
+  zoom = 12,
 }: {
   zones: Zone[];
   pins: Pin[];
@@ -62,19 +55,19 @@ export default function LeafletMap({
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
       {zones.map((zone) => {
-        const positions = toLatLngs(zone.polygon);
-        if (positions.length < 3) return null;
-        const color = riskColor[zone.risk_level] ?? riskColor["low"]!;
+        const color = riskColor[zone.risk_level] ?? riskColor["safe"]!;
         return (
-          <Polygon
+          <Circle
             key={zone.id}
-            positions={positions}
+            center={[zone.center_lat, zone.center_lng]}
+            radius={zone.radius_m}
             pathOptions={{ color, fillColor: color, fillOpacity: 0.22, weight: 1.5 }}
           >
             <Tooltip sticky>
-              <span className="font-medium">{zone.name}</span> — {zone.risk_level} risk
+              <span className="font-medium">{zone.name}</span> — {zone.risk_level}
+              {zone.description ? <div>{zone.description}</div> : null}
             </Tooltip>
-          </Polygon>
+          </Circle>
         );
       })}
       {pins.map((pin) => (

@@ -81,9 +81,9 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function RiskBadge({ level }: { level: string }) {
   const tone =
-    level === "high"
+    level === "restricted"
       ? "bg-[var(--danger)]/18 text-[var(--danger)]"
-      : level === "medium"
+      : level === "caution"
         ? "bg-[var(--caution)]/20 text-[var(--caution)]"
         : "bg-[var(--safe)]/18 text-[var(--safe)]";
   return (
@@ -93,7 +93,7 @@ export function RiskBadge({ level }: { level: string }) {
         tone,
       )}
     >
-      {level} risk
+      {level}
     </span>
   );
 }

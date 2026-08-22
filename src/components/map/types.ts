@@ -3,7 +3,9 @@ export type Zone = {
   name: string;
   risk_level: string;
   description: string | null;
-  polygon: unknown;
+  center_lat: number;
+  center_lng: number;
+  radius_m: number;
 };
 
 export type Pin = {

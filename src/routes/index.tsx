@@ -4,7 +4,6 @@ import { ShieldCheck, MapPin, Fingerprint } from "lucide-react";
 
 import logo from "@/assets/beacon-logo.png";
 import { GlassCard, PressButton } from "@/components/ui/glass";
-import { ThemeToggle } from "@/components/theme-provider";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -37,7 +36,6 @@ function Landing() {
     <main className="relative min-h-screen overflow-hidden px-5 py-6">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
         <span className="text-sm font-semibold tracking-[0.35em] text-muted-foreground">BEACON</span>
-        <ThemeToggle />
       </div>
 
       <div className="mx-auto mt-8 grid w-full max-w-5xl gap-6 lg:mt-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">

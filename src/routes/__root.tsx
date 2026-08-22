@@ -11,7 +11,6 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -125,13 +124,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
         <AuthProvider>
           {/* Required: nested routes render here. */}
           <Outlet />
           <Toaster position="top-center" />
         </AuthProvider>
-      </ThemeProvider>
     </QueryClientProvider>
   );
 }

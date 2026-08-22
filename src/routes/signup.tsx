@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import logo from "@/assets/beacon-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { GlassCard, PressButton } from "@/components/ui/glass";
-import { ThemeToggle } from "@/components/theme-provider";
 import { Field } from "./login";
 
 export const Route = createFileRoute("/signup")({
@@ -75,7 +74,6 @@ function SignupPage() {
         <Link to="/" className="text-sm font-semibold tracking-[0.35em] text-muted-foreground">
           BEACON
         </Link>
-        <ThemeToggle />
       </div>
 
       <div className="mx-auto flex w-full max-w-md flex-1 items-center py-8">

@@ -16,7 +16,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 
 import logo from "@/assets/beacon-logo.png";
-import { ThemeToggle } from "@/components/theme-provider";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +81,7 @@ export function TopBar({
             <Menu className="h-5 w-5" />
           </button>
           <h1 className="truncate text-center text-base font-semibold text-foreground">{title}</h1>
-          <ThemeToggle />
+          <span className="h-10 w-10" />
         </div>
       </header>
 
@@ -240,7 +239,6 @@ export function DesktopHeader({ title }: { title: string }) {
   return (
     <div className="glass mb-6 hidden items-center justify-between px-5 py-3 lg:flex">
       <h1 className="truncate text-lg font-semibold text-foreground">{title}</h1>
-      <ThemeToggle />
     </div>
   );
 }

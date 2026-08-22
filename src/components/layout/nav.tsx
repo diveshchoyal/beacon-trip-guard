@@ -20,20 +20,27 @@ import { ThemeToggle } from "@/components/theme-provider";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
-export const touristLinks = [
+export type NavLink = {
+  to: string;
+  label: string;
+  icon: typeof Home;
+  exact?: boolean;
+};
+
+export const touristLinks: NavLink[] = [
   { to: "/app", label: "Home", icon: Home, exact: true },
   { to: "/app/map", label: "Map", icon: Map },
   { to: "/app/id", label: "Digital ID", icon: Fingerprint },
   { to: "/app/alerts", label: "Alerts", icon: AlertTriangle },
   { to: "/app/profile", label: "Profile", icon: UserRound },
-] as const;
+];
 
-export const policeLinks = [
+export const policeLinks: NavLink[] = [
   { to: "/dashboard", label: "Live Map", icon: Map, exact: true },
   { to: "/dashboard/alerts", label: "Alerts", icon: AlertTriangle },
   { to: "/dashboard/registry", label: "Tourist Registry", icon: Users },
   { to: "/dashboard/efir", label: "E-FIR Log", icon: FileText },
-] as const;
+];
 
 export function useSignOut() {
   const navigate = useNavigate();
@@ -56,7 +63,7 @@ export function TopBar({
   links,
 }: {
   title: string;
-  links: readonly { to: string; label: string; icon: typeof Home; exact?: boolean }[];
+  links: NavLink[];
 }) {
   const [open, setOpen] = useState(false);
   const isActive = useActive();
@@ -185,7 +192,7 @@ export function DesktopSidebar({
   links,
   subtitle,
 }: {
-  links: readonly { to: string; label: string; icon: typeof Home; exact?: boolean }[];
+  links: NavLink[];
   subtitle: string;
 }) {
   const isActive = useActive();

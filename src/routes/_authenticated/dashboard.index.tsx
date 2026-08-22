@@ -71,7 +71,7 @@ function LiveMap() {
       lat: a.lat as number,
       lng: a.lng as number,
       label: `${a.type.toUpperCase()} · ${a.status}`,
-      sublabel: a.message ?? undefined,
+      ...(a.message ? { sublabel: a.message } : {}),
       tone: "alert" as const,
     }));
 

@@ -2,22 +2,7 @@ import { useMemo } from "react";
 import { MapContainer, TileLayer, Polygon, Marker, Popup, Tooltip } from "react-leaflet";
 import L from "leaflet";
 
-export type Zone = {
-  id: string;
-  name: string;
-  risk_level: string;
-  description: string | null;
-  polygon: unknown;
-};
-
-export type Pin = {
-  id: string;
-  lat: number;
-  lng: number;
-  label: string;
-  sublabel?: string;
-  tone: "self" | "tourist" | "alert";
-};
+import type { Pin, Zone } from "./types";
 
 const riskColor: Record<string, string> = {
   high: "#C0483C",

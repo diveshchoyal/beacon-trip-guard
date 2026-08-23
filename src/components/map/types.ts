@@ -14,5 +14,12 @@ export type Pin = {
   lng: number;
   label: string;
   sublabel?: string;
-  tone: "self" | "tourist" | "alert";
+  tone: "self" | "tourist" | "alert" | "place";
 };
+
+export type {
+  TouristPlace,
+  TimeRule,
+  SafetyStatus,
+  PlaceSafetyEvaluation,
+} from "./places-data";

@@ -30,7 +30,7 @@ function TouristLayout() {
       <div className="mx-auto flex w-full max-w-6xl gap-6 px-4 py-6 lg:px-6">
         <DesktopSidebar links={touristLinks} subtitle="Tourist" />
         <main className="min-w-0 flex-1 pb-28 lg:pb-6">
-          <DesktopHeader title={title} />
+          {pathname !== "/app" && <DesktopHeader title={title} />}
           <Outlet />
         </main>
       </div>

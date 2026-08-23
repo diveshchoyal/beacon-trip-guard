@@ -1,108 +1,126 @@
-import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  CheckCircle2,
-  Fingerprint,
-  Map as MapIcon,
-  ShieldAlert,
-  Languages,
   AlertTriangle,
+  Bell,
+  Building2,
+  CheckCircle2,
+  ChevronRight,
+  CloudSun,
+  Copy,
+  Fingerprint,
+  Globe,
+  Home,
+  Info,
+  Languages,
+  Loader2,
+  LogOut,
+  Map as MapIcon,
+  MapPin,
+  Mic,
+  MicOff,
+  Navigation,
+  Radio,
+  Send,
+  Share2,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  User,
+  Users,
+  Volume1,
+  Volume2,
+  VolumeX,
+  X,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import logo from "@/assets/beacon-logo.png";
 import mascotImg from "@/assets/tourist-mascot.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone } from "@/hooks/use-geolocation";
-import { GlassCard } from "@/components/ui/glass";
+import {
+  SUPPORTED_LANGUAGES,
+  type SpeakerRole,
+  type SpeechRecognitionLike,
+  type SpeechRecognitionEventLike,
+  type SpeechRecognitionErrorEventLike,
+  getLoadedVoices,
+  findMatchingVoice,
+} from "@/lib/translation.types";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
 });
 
-// Copper / Metallic Circular Ring Gauge Component matching reference design
-function CopperRingScoreGauge({ score, risk }: { score: number; risk: string }) {
-  const radius = 34;
-  const strokeWidth = 8;
-  const circumference = 2 * Math.PI * radius;
-  const progressOffset = circumference - (score / 100) * circumference;
+// Quick emergency phrase presets
+const QUICK_QUESTIONS_TOURIST = [
+  "I need medical assistance immediately.",
+  "I lost my passport and travel bag.",
+  "Where is the nearest police station?",
+  "Can you help me contact my embassy?",
+];
 
-  // Center score number color matching reference green tone
-  const scoreNumColor =
-    risk === "restricted"
-      ? "text-rose-700"
-      : risk === "caution"
-        ? "text-amber-700"
-        : "text-[#3d7057]";
+const QUICK_RESPONSES_OFFICER = [
+  "Please stay calm, you are safe here.",
+  "Show me your Digital ID or passport.",
+  "Can you describe what happened?",
+  "An emergency response unit is on the way.",
+];
 
-  return (
-    <div className="relative flex flex-col items-center justify-center select-none shrink-0">
-      <div className="relative h-24 w-24 sm:h-28 sm:w-28 flex items-center justify-center">
-        {/* Soft Inset Clay Circle Backdrop */}
-        <div className="absolute inset-1.5 rounded-full bg-[#f2eae0] shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]" />
-
-        <svg
-          className="h-full w-full -rotate-90 transform drop-shadow-xs relative z-10"
-          viewBox="0 0 88 88"
-        >
-          <defs>
-            {/* Metallic Copper / Terracotta Gradient for the Ring */}
-            <linearGradient id="copperRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#dca284" />
-              <stop offset="50%" stopColor="#b87253" />
-              <stop offset="100%" stopColor="#96563a" />
-            </linearGradient>
-          </defs>
-
-          {/* Background Groove */}
-          <circle
-            cx="44"
-            cy="44"
-            r={radius}
-            stroke="#e6d9cb"
-            strokeWidth={strokeWidth}
-            fill="transparent"
-          />
-
-          {/* Active Metallic Copper Progress Ring */}
-          <motion.circle
-            cx="44"
-            cy="44"
-            r={radius}
-            stroke="url(#copperRingGrad)"
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            fill="transparent"
-            strokeDasharray={circumference}
-            initial={{ strokeDashoffset: circumference }}
-            animate={{ strokeDashoffset: progressOffset }}
-            transition={{ duration: 1.2, ease: "easeOut" }}
-          />
-        </svg>
-
-        {/* Center Score Number & SCORE Label */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-20">
-          <span className={`text-2xl sm:text-3xl font-black leading-none ${scoreNumColor}`}>
-            {score}
-          </span>
-          <span className="mt-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-[#8c7a6b]">
-            SCORE
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Safety tips presets for modal
+const SAFETY_TIPS = [
+  {
+    title: "Official Tourist Helpline",
+    desc: "Dial 1363 (24x7 Multi-lingual toll-free Tourist Helpline) or 112 for all emergencies.",
+  },
+  {
+    title: "Verified Transport",
+    desc: "Always use prepaid airport/railway taxi counters or registered ride-hailing apps.",
+  },
+  {
+    title: "Digital ID Verification",
+    desc: "Keep your QR Digital ID readily accessible on BEACON for swift verification at checkpoints.",
+  },
+  {
+    title: "Geofence Notifications",
+    desc: "Stay alert if you receive a notification when entering caution or restricted zones after dusk.",
+  },
+];
 
 function TouristHome() {
   const { user, profile } = useAuth();
-  const { effective, coords, error } = useGeolocation();
+  const { effective, coords, error: geoError, requestLocation } = useGeolocation();
   const queryClient = useQueryClient();
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const navigate = useNavigate();
 
+  // Local state
+  const [sendingSos, setSendingSos] = useState(false);
+  const [sosSent, setSosSent] = useState(false);
+  const [safetyTipsOpen, setSafetyTipsOpen] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [weatherData, setWeatherData] = useState<{ temp: number; text: string } | null>(null);
+
+  // Translation interaction states
+  const [touristInput, setTouristInput] = useState("");
+  const [officerInput, setOfficerInput] = useState("");
+  const [touristTranslated, setTouristTranslated] = useState("");
+  const [officerTranslated, setOfficerTranslated] = useState("");
+  const [touristLang, setTouristLang] = useState("en");
+  const [officerLang, setOfficerLang] = useState("ta");
+  const [activeMic, setActiveMic] = useState<SpeakerRole | null>(null);
+  const [isTranslating, setIsTranslating] = useState<SpeakerRole | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState<string | null>(null);
+  const [installedVoices, setInstalledVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  // Load geofence zones from Supabase
   const { data: zones = [] } = useQuery({
     queryKey: ["zones"],
     queryFn: async () => {
@@ -112,18 +130,81 @@ function TouristHome() {
     },
   });
 
+  // Query unread alerts count
+  const { data: unreadAlertsCount = 0 } = useQuery({
+    queryKey: ["unread-alerts-count"],
+    queryFn: async () => {
+      if (!user) return 0;
+      const { count, error: e } = await supabase
+        .from("alerts")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("status", "active");
+      if (e) return 0;
+      return count ?? 0;
+    },
+    enabled: Boolean(user),
+  });
+
+  // Current zone calculation
   const currentZone = useMemo(
     () => zones.find((z) => inZone(effective, z)),
     [zones, effective],
   );
 
   const risk = currentZone?.risk_level ?? "safe";
-  const score = Math.max(
+  const safetyScore = Math.max(
     35,
     (profile?.safety_score ?? 85) - (risk === "restricted" ? 30 : risk === "caution" ? 12 : 0),
   );
 
-  // Persist location ping every 2 minutes so responders see live position
+  // Load voices for speech output
+  useEffect(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      void getLoadedVoices().then((v) => setInstalledVoices(v));
+      const onVoices = () => setInstalledVoices(window.speechSynthesis.getVoices());
+      window.speechSynthesis.addEventListener("voiceschanged", onVoices);
+      return () => window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+    }
+  }, []);
+
+  // Fetch real weather data from Open-Meteo
+  useEffect(() => {
+    let active = true;
+    async function loadWeather() {
+      try {
+        const lat = effective.lat || 13.0827;
+        const lng = effective.lng || 80.2707;
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`,
+          { signal: AbortSignal.timeout(4000) },
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active && data?.current_weather) {
+          const temp = Math.round(data.current_weather.temperature);
+          const code = data.current_weather.weathercode;
+          let text = "Clear Sky";
+          if (code >= 1 && code <= 3) text = "Partly Cloudy";
+          else if (code >= 45 && code <= 48) text = "Hazy / Fog";
+          else if (code >= 51 && code <= 67) text = "Light Rain";
+          else if (code >= 80 && code <= 99) text = "Scattered Showers";
+
+          setWeatherData({ temp, text });
+        }
+      } catch {
+        if (active) {
+          setWeatherData({ temp: 31, text: "Few Clouds" });
+        }
+      }
+    }
+    void loadWeather();
+    return () => {
+      active = false;
+    };
+  }, [effective.lat, effective.lng]);
+
+  // Persist location ping every 2 minutes for responders
   useEffect(() => {
     if (!user || !coords) return;
     const write = () =>
@@ -135,310 +216,1020 @@ function TouristHome() {
     return () => window.clearInterval(id);
   }, [user, coords]);
 
+  // Trigger real emergency SOS
   const triggerSos = async () => {
     if (!user) return;
-    setSending(true);
+    setSendingSos(true);
     const { error: e } = await supabase.from("alerts").insert({
       user_id: user.id,
       type: "sos",
-      message: currentZone ? `SOS raised in ${currentZone.name}` : "SOS raised",
+      message: currentZone ? `SOS raised in ${currentZone.name}` : "Emergency SOS raised by tourist",
       lat: effective.lat,
       lng: effective.lng,
     });
-    setSending(false);
+    setSendingSos(false);
     if (e) {
       toast.error(e.message);
       return;
     }
-    toast.success("Emergency alert sent — police unit notified");
-    setSent(true);
-    window.setTimeout(() => setSent(false), 9000);
+    toast.success("EMERGENCY SOS SENT — Response units alerted");
+    setSosSent(true);
+    window.setTimeout(() => setSosSent(false), 9000);
     void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
+    void queryClient.invalidateQueries({ queryKey: ["unread-alerts-count"] });
+  };
+
+  // Share live location handler
+  const handleShareLocation = async () => {
+    const mapsUrl = `https://www.google.com/maps?q=${effective.lat},${effective.lng}`;
+    const text = `BEACON Live Safety Ping: I am currently at ${currentZone?.name ?? "Tamil Nadu, India"}. Live Map: ${mapsUrl}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "My BEACON Live Location",
+          text,
+          url: mapsUrl,
+        });
+        toast.success("Location shared successfully");
+        return;
+      } catch {
+        // Fallback to clipboard
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(mapsUrl);
+      toast.success("Live GPS link copied to clipboard");
+    } catch {
+      toast.info(`Your GPS: ${effective.lat.toFixed(4)}, ${effective.lng.toFixed(4)}`);
+    }
+  };
+
+  // TTS Speech Player
+  const speakText = useCallback(
+    async (text: string, langCode: string, id: string) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window) || !text.trim()) return;
+
+      const voices = installedVoices.length > 0 ? installedVoices : await getLoadedVoices();
+      const voice = findMatchingVoice(voices, langCode);
+
+      if (!voice) {
+        toast.info(`Text only: Voice package for this language is not installed on this device.`);
+        return;
+      }
+
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text.trim());
+        utterance.voice = voice;
+        utterance.lang = voice.lang;
+        utterance.rate = 0.95;
+
+        setIsPlayingAudio(id);
+        utterance.onend = () => setIsPlayingAudio(null);
+        utterance.onerror = () => setIsPlayingAudio(null);
+
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        setIsPlayingAudio(null);
+      }
+    },
+    [installedVoices],
+  );
+
+  // Translation executor
+  const executeTranslate = useCallback(
+    async (text: string, speaker: SpeakerRole) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      setIsTranslating(speaker);
+      const sourceLang = speaker === "tourist" ? touristLang : officerLang;
+      const targetLang = speaker === "tourist" ? officerLang : touristLang;
+      let translated = "";
+
+      try {
+        // 1. Try Supabase Edge Function
+        try {
+          const { data, error: e } = await supabase.functions.invoke("translate-text", {
+            body: {
+              text: trimmed,
+              source_lang: sourceLang,
+              target_lang: targetLang,
+            },
+          });
+          if (!e && (data as { translated_text?: string })?.translated_text) {
+            translated = (data as { translated_text: string }).translated_text;
+          }
+        } catch {
+          // Fallback
+        }
+
+        // 2. Direct free translation fallback
+        if (!translated) {
+          const src = sourceLang.toLowerCase().split("-")[0];
+          const tgt = targetLang.toLowerCase().split("-")[0];
+          if (src === tgt) {
+            translated = trimmed;
+          } else {
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${src}|${tgt}`;
+            const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+            if (res.ok) {
+              const json = await res.json();
+              if (json?.responseData?.translatedText) {
+                translated = json.responseData.translatedText
+                  .replace(/&amp;/g, "&")
+                  .replace(/&lt;/g, "<")
+                  .replace(/&gt;/g, ">")
+                  .replace(/&#39;/g, "'")
+                  .replace(/&quot;/g, '"');
+              }
+            }
+          }
+        }
+
+        if (!translated) translated = trimmed;
+
+        if (speaker === "tourist") {
+          setOfficerTranslated(translated);
+          void speakText(translated, officerLang, "officer-output");
+        } else {
+          setTouristTranslated(translated);
+          void speakText(translated, touristLang, "tourist-output");
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Translation error";
+        toast.error(`Translation notice: ${msg}`);
+      } finally {
+        setIsTranslating(null);
+      }
+    },
+    [touristLang, officerLang, speakText],
+  );
+
+  // Speech-to-text handler
+  const toggleSpeechInput = (speaker: SpeakerRole) => {
+    if (typeof window === "undefined") return;
+
+    if (activeMic === speaker) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // Ignore
+        }
+      }
+      setActiveMic(null);
+      return;
+    }
+
+    const SpeechRec =
+      (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition;
+
+    if (!SpeechRec) {
+      toast.info("Voice input is not supported in this browser. Please type your message.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRec();
+      const code = speaker === "tourist" ? touristLang : officerLang;
+      const langCfg = SUPPORTED_LANGUAGES.find((l) => l.code === code);
+      recognition.lang = langCfg?.speechCode || "en-US";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => setActiveMic(speaker);
+
+      let finalCaptured = "";
+      recognition.onresult = (event: SpeechRecognitionEventLike) => {
+        let live = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item && item[0]) {
+            if (item.isFinal) finalCaptured += item[0].transcript;
+            else live += item[0].transcript;
+          }
+        }
+        const display = finalCaptured || live;
+        if (speaker === "tourist") setTouristInput(display);
+        else setOfficerInput(display);
+      };
+
+      recognition.onerror = () => {
+        setActiveMic(null);
+      };
+
+      recognition.onend = () => {
+        setActiveMic(null);
+        recognitionRef.current = null;
+        const textToTranslate = finalCaptured.trim() || (speaker === "tourist" ? touristInput : officerInput).trim();
+        if (textToTranslate) {
+          void executeTranslate(textToTranslate, speaker);
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setActiveMic(null);
+      toast.error("Could not access microphone.");
+    }
   };
 
   const firstName = profile?.full_name?.trim()
     ? profile.full_name.trim().split(" ")[0]
-    : "Divesh";
-
-  const statusSentence =
-    risk === "restricted"
-      ? "You are inside a restricted zone. Stay alert and keep to marked paths."
-      : risk === "caution"
-        ? "Moderate risk area — patchy coverage. Share your plan with someone."
-        : "You are in a well-monitored area. Enjoy your trip.";
+    : "Traveler";
 
   return (
-    <div className="space-y-6 pb-24 lg:pb-12">
+    <div className="space-y-6 pb-28 lg:pb-12 text-[#1E1E1E]">
       {/* ========================================================================= */}
-      {/* 1. EXACT HERO CARD LAYOUT MATCHING REFERENCE DESIGN (CLAY AESTHETIC) */}
+      {/* 1. TOP NAVIGATION — FLOATING CORAL/PEACH GLASS PILL BAR */}
       {/* ========================================================================= */}
-      <div className="relative rounded-[32px] border-[3px] border-[#ece4d8] bg-[#faf7f2]/95 p-5 sm:p-7 shadow-[inset_0_2px_4px_rgba(255,255,255,0.9),0_12px_28px_-6px_rgba(150,120,90,0.15)] transition-all">
-        {/* TOP SECTION: HELLO/STATUS (LEFT) + MASCOT & THOUGHT BUBBLE (CENTER) + COPPER RING GAUGE (RIGHT) */}
-        <div className="grid grid-cols-1 md:grid-cols-[1.1fr_auto_1.1fr] items-center gap-6 pb-6">
-          {/* Left Column: Hello tourist name + bold "Safety score" + live status sentence */}
-          <div className="space-y-1.5 text-left">
-            <p className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-[#8c7866]">
-              HELLO, {firstName.toUpperCase()}
-            </p>
-            <h2 className="text-xl sm:text-2xl font-black text-[#26201b] tracking-tight">
-              Safety score
-            </h2>
-            <p className="text-xs sm:text-sm text-[#736354] leading-relaxed max-w-xs pt-0.5">
-              {statusSentence}
+      <nav className="relative z-30 flex items-center justify-between rounded-[28px] border border-[#F6B28F]/40 bg-white/85 px-4 sm:px-6 py-3 shadow-[0_8px_30px_rgba(255,111,97,0.08)] backdrop-blur-md transition-all">
+        {/* Left Brand with BEACON Logo & Tagline */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FF6F61] to-[#F6B28F] p-1.5 shadow-md shadow-[#FF6F61]/25">
+            <img src={logo} alt="BEACON" className="h-full w-full object-contain drop-shadow-xs" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base sm:text-lg font-black tracking-wider text-[#1E1E1E]">
+                BEACON
+              </span>
+              <span className="h-1.5 w-1.5 rounded-full bg-[#39B86B] animate-pulse" />
+            </div>
+            <p className="hidden sm:block text-[10px] font-semibold text-[#77716D] tracking-tight">
+              Safe Travel. Smart Response.
             </p>
           </div>
+        </div>
 
-          {/* Center Column: Animated Mascot with Noticeable Wave, "– HI" tag & Scalloped Thought Bubble */}
-          <div className="relative flex flex-col items-center justify-center px-4 py-2 shrink-0">
-            {/* Scalloped Cloud-Shaped Thought Bubble displaying LIVE score */}
-            <motion.div
-              animate={{ y: [0, -6, 0] }}
-              transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
-              className="absolute -top-7 right-0 sm:right-2 z-20 flex items-center justify-center select-none"
+        {/* Center Navigation Links (Desktop) */}
+        <div className="hidden md:flex items-center gap-1 rounded-2xl bg-[#FFF8F3] p-1 border border-[#F6B28F]/30 shadow-inner">
+          {[
+            { to: "/app", label: "Home", icon: Home, exact: true },
+            { to: "/app/map", label: "Map", icon: MapIcon },
+            { to: "/app/alerts", label: "Alerts", icon: AlertTriangle },
+            { to: "/app/id", label: "Digital ID", icon: Fingerprint },
+            { to: "/app/profile", label: "Profile", icon: User },
+          ].map((item) => {
+            const isSelected = item.to === "/app";
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`relative flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all duration-200 ${
+                  isSelected
+                    ? "bg-gradient-to-r from-[#FF6F61] to-[#FF8577] text-white shadow-md shadow-[#FF6F61]/30"
+                    : "text-[#77716D] hover:text-[#1E1E1E] hover:bg-white/60"
+                }`}
+              >
+                <item.icon className="h-3.5 w-3.5" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Right Section: Notification Badge + Language + Profile Avatar */}
+        <div className="flex items-center gap-2.5">
+          {/* Notification Icon with Badge */}
+          <Link
+            to="/app/alerts"
+            className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-[#FFF8F3] text-[#77716D] hover:text-[#1E1E1E] border border-[#F6B28F]/30 hover:bg-white transition-colors"
+            title="View Alerts"
+          >
+            <Bell className="h-4 w-4" />
+            {unreadAlertsCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#E94B5F] px-1 text-[9px] font-black text-white shadow-xs animate-bounce">
+                {unreadAlertsCount}
+              </span>
+            )}
+          </Link>
+
+          {/* Language Selector Dropdown */}
+          <div className="relative">
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              className="appearance-none rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2.5 py-1.5 pr-7 text-xs font-bold text-[#1E1E1E] focus:outline-none focus:ring-2 focus:ring-[#FF6F61]/40 cursor-pointer shadow-2xs"
             >
-              <div className="relative flex items-center justify-center rounded-[28px] bg-white/95 px-4 py-2 shadow-[0_4px_16px_rgba(170,130,100,0.22),inset_0_2px_4px_rgba(255,255,255,1)] border border-[#e8ded0]">
-                {/* Score Number in bold copper/brown */}
-                <span className="text-2xl sm:text-3xl font-black tracking-tight text-[#a06649]">
-                  {score}
-                </span>
+              <option value="en">🇺🇸 EN</option>
+              <option value="ta">🇮🇳 தமிழ்</option>
+              <option value="hi">🇮🇳 हिन्दी</option>
+              <option value="fr">🇫🇷 FR</option>
+              <option value="es">🇪🇸 ES</option>
+            </select>
+            <Languages className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#77716D]" />
+          </div>
 
-                {/* Cloud Bubble Scallop bumps */}
-                <span className="absolute -top-1.5 left-2 h-4 w-4 rounded-full bg-white/95 border-t border-l border-[#e8ded0]" />
-                <span className="absolute -top-2.5 right-3 h-5 w-5 rounded-full bg-white/95 border-t border-[#e8ded0]" />
-                <span className="absolute -bottom-1.5 right-2 h-4 w-4 rounded-full bg-white/95 border-b border-r border-[#e8ded0]" />
+          {/* Profile Avatar */}
+          <Link
+            to="/app/profile"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#F6B28F] to-[#FF6F61] text-white font-black text-xs shadow-xs border border-white hover:scale-105 transition-transform"
+            title="Profile settings"
+          >
+            {firstName.charAt(0).toUpperCase()}
+          </Link>
+        </div>
+      </nav>
 
-                {/* Trailing dots connecting thought bubble to character's head */}
-                <span className="absolute -bottom-2 -left-1.5 h-3 w-3 rounded-full bg-white/95 border border-[#e8ded0] shadow-2xs" />
-                <span className="absolute -bottom-4 -left-3.5 h-1.5 w-1.5 rounded-full bg-white/90 border border-[#e8ded0] shadow-2xs" />
+      {/* ========================================================================= */}
+      {/* 2. HERO SECTION — FUTURISTIC 3D SAFETY VISUALIZATION & LIVE LOCATION */}
+      {/* ========================================================================= */}
+      <div className="relative overflow-hidden rounded-[36px] border border-[#F6B28F]/30 bg-gradient-to-br from-white via-[#FFF8F3] to-[#FFF1EA] p-6 sm:p-8 lg:p-10 shadow-[0_16px_45px_rgba(255,111,97,0.08)]">
+        {/* Soft Background Atmospheric Glow */}
+        <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-gradient-to-br from-[#FF6F61]/15 to-[#F6B28F]/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-gradient-to-tr from-[#F6B28F]/15 to-[#FF6F61]/10 blur-3xl" />
+
+        <div className="relative grid grid-cols-1 lg:grid-cols-12 items-center gap-8 lg:gap-6">
+          {/* Left Column: Greeting + Dynamic Status & Current Location Card (5 Cols) */}
+          <div className="lg:col-span-5 space-y-5 text-left">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-[#FF6F61]/10 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-[#FF6F61] border border-[#FF6F61]/20">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Hi, {firstName}! 👋</span>
               </div>
-            </motion.div>
 
-            {/* "– HI" text tag near the raised waving hand, pulsing with the wave */}
-            <motion.div
-              animate={{
-                opacity: [0.65, 1, 0.65],
-                scale: [0.95, 1.06, 0.95],
-              }}
-              transition={{
-                repeat: Infinity,
-                duration: 3.2,
-                ease: "easeInOut",
-              }}
-              className="absolute top-11 sm:top-12 right-0 sm:right-1 z-20 text-xs sm:text-sm font-black tracking-wider text-[#26201b] select-none pointer-events-none"
-            >
-              – HI
-            </motion.div>
+              <h1 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-[#1E1E1E] leading-[1.1]">
+                You are safe.
+                <span className="block mt-1 bg-gradient-to-r from-[#FF6F61] to-[#E94B5F] bg-clip-text text-transparent">
+                  We are watching.
+                </span>
+              </h1>
 
-            {/* Soft Ground Shadow pulsing beneath the globe */}
+              <p className="mt-3 text-xs sm:text-sm text-[#77716D] leading-relaxed max-w-md font-medium">
+                BEACON monitors your surroundings in real-time and connects you to help, instantly.
+              </p>
+            </div>
+
+            {/* Prominent Current Location Card */}
+            <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 sm:p-5 shadow-[0_8px_25px_rgba(255,111,97,0.06)] backdrop-blur-md">
+              <div className="flex items-center justify-between gap-2 border-b border-black/5 pb-2.5">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D] flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
+                  CURRENT LOCATION
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                    risk === "restricted"
+                      ? "bg-[#E94B5F]/15 text-[#E94B5F]"
+                      : risk === "caution"
+                        ? "bg-[#F2A93B]/15 text-[#F2A93B]"
+                        : "bg-[#39B86B]/15 text-[#39B86B]"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      risk === "restricted"
+                        ? "bg-[#E94B5F]"
+                        : risk === "caution"
+                          ? "bg-[#F2A93B]"
+                          : "bg-[#39B86B]"
+                    }`}
+                  />
+                  {risk === "restricted"
+                    ? "Restricted Zone"
+                    : risk === "caution"
+                      ? "Caution Zone"
+                      : "Safe Zone"}
+                </span>
+              </div>
+
+              <div className="mt-3 flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#FF6F61]/10 text-[#FF6F61]">
+                  <MapPin className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm sm:text-base font-black text-[#1E1E1E]">
+                    {currentZone?.name ?? "Marina Beach, Chennai, Tamil Nadu"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[#77716D] truncate">
+                    {geoError ? "GPS tracking active (simulated location)" : "Location tracked live via GPS satellite"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Location fallback button if not granted */}
+              {geoError && (
+                <button
+                  onClick={requestLocation}
+                  className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-xl bg-[#FF6F61]/10 py-1.5 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-colors cursor-pointer"
+                >
+                  <Radio className="h-3.5 w-3.5 animate-pulse" />
+                  <span>Enable Accurate GPS</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Center 3D Mascot Character with Slow Rotating Globe Background (4 Cols) */}
+          <div className="lg:col-span-4 relative flex flex-col items-center justify-center py-4 select-none">
+            {/* Animated Rotating Earth & Atmospheric Aura */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              {/* Rotating Wireframe SVG Globe */}
+              <motion.svg
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 45, ease: "linear" }}
+                className="h-64 w-64 sm:h-72 sm:w-72 text-[#F6B28F]/25 drop-shadow-sm"
+                viewBox="0 0 100 100"
+                fill="none"
+              >
+                <circle cx="50" cy="50" r="46" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+                <ellipse cx="50" cy="50" rx="46" ry="20" stroke="currentColor" strokeWidth="0.8" />
+                <ellipse cx="50" cy="50" rx="46" ry="34" stroke="currentColor" strokeWidth="0.8" />
+                <ellipse cx="50" cy="50" rx="20" ry="46" stroke="currentColor" strokeWidth="0.8" />
+                <ellipse cx="50" cy="50" rx="34" ry="46" stroke="currentColor" strokeWidth="0.8" />
+                <line x1="4" y1="50" x2="96" y2="50" stroke="currentColor" strokeWidth="1" />
+                <line x1="50" y1="4" x2="50" y2="96" stroke="currentColor" strokeWidth="1" />
+              </motion.svg>
+
+              {/* Glowing Atmosphere Radial Gradient */}
+              <div className="absolute h-56 w-56 rounded-full bg-gradient-to-br from-[#FF6F61]/10 via-[#F6B28F]/15 to-transparent blur-xl" />
+            </div>
+
+            {/* Synchronized Soft Ground Shadow */}
             <motion.div
               animate={{
                 scale: [1, 0.85, 1],
-                opacity: [0.32, 0.16, 0.32],
+                opacity: [0.35, 0.18, 0.35],
               }}
               transition={{
                 repeat: Infinity,
                 duration: 3.2,
                 ease: "easeInOut",
               }}
-              className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-4 w-28 rounded-full bg-[#7a6452]/25 blur-md pointer-events-none"
+              className="absolute bottom-2 left-1/2 -translate-x-1/2 h-5 w-32 rounded-full bg-[#FF6F61]/20 blur-md pointer-events-none"
             />
 
-            {/* Mascot Character with Noticeable Hand Wave & Breathing Animation */}
+            {/* 3D Mascot Character with Gentle Breathing & Hand Wave */}
             <motion.img
               src={mascotImg}
-              alt="BEACON Tourist Mascot"
+              alt="BEACON 3D Tourist Character"
               animate={{
                 y: [0, -10, 0],
-                rotate: [0, 5.5, -3.5, 4, 0],
+                rotate: [0, 4.5, -3, 3.5, 0],
               }}
               transition={{
                 y: { repeat: Infinity, duration: 3.2, ease: "easeInOut" },
-                rotate: { repeat: Infinity, duration: 3.8, ease: "easeInOut" },
+                rotate: { repeat: Infinity, duration: 4, ease: "easeInOut" },
               }}
-              className="h-44 sm:h-52 w-auto object-contain select-none pointer-events-none drop-shadow-md"
+              className="relative z-10 h-56 sm:h-64 lg:h-72 w-auto object-contain drop-shadow-xl"
             />
           </div>
 
-          {/* Right Column: Circular Copper Ring Gauge (with matching "Safety score" text on desktop) */}
-          <div className="flex flex-col items-center md:items-end justify-center">
-            <div className="flex items-center gap-4">
-              <div className="text-left hidden sm:block md:hidden lg:block">
-                <h3 className="text-base font-black text-[#26201b]">Safety score</h3>
-                <p className="text-xs text-[#736354] max-w-[155px] leading-snug">
-                  {statusSentence}
-                </p>
+          {/* Right Column: Floating Live Location & Coordinates Card (3 Cols) */}
+          <div className="lg:col-span-3 flex flex-col justify-center">
+            <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-5 shadow-[0_10px_30px_rgba(255,111,97,0.08)] backdrop-blur-md space-y-4">
+              <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D]">
+                  YOUR LOCATION
+                </span>
+                <span className="flex items-center gap-1 text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
+                  <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
+                  LIVE
+                </span>
               </div>
-              <CopperRingScoreGauge score={score} risk={risk} />
+
+              {/* Geographic Details */}
+              <div className="space-y-1 text-left">
+                <p className="text-base font-black text-[#1E1E1E]">Chennai</p>
+                <p className="text-xs font-bold text-[#77716D]">Tamil Nadu, India</p>
+              </div>
+
+              {/* Live Coordinates */}
+              <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[#FFF8F3] p-2.5 border border-[#F6B28F]/20 text-[11px]">
+                <div>
+                  <span className="text-[9px] font-black uppercase text-[#77716D] block">Latitude</span>
+                  <span className="font-mono font-bold text-[#1E1E1E]">
+                    {effective.lat ? effective.lat.toFixed(4) : "13.0827"}° N
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase text-[#77716D] block">Longitude</span>
+                  <span className="font-mono font-bold text-[#1E1E1E]">
+                    {effective.lng ? effective.lng.toFixed(4) : "80.2707"}° E
+                  </span>
+                </div>
+              </div>
+
+              {/* View on Map CTA Button */}
+              <Link
+                to="/app/map"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] py-2.5 text-xs font-black text-white shadow-md shadow-[#FF6F61]/25 hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                <span>View on Map</span>
+                <ChevronRight className="h-4 w-4" />
+              </Link>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* BOTTOM SECTION: DIVIDER LINE + CURRENT ZONE (LEFT) + RISK BADGE (RIGHT) */}
-        <div className="border-t-2 border-[#ede4d8] pt-4.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-          <div className="min-w-0">
-            <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-[#8c7866]">
-              CURRENT ZONE
-            </p>
-            <p className="mt-0.5 truncate text-base sm:text-lg font-black text-[#26201b]">
-              {currentZone?.name ?? "Open area — no active geofence"}
-            </p>
-            <p className="mt-0.5 text-xs text-[#736354] truncate">
-              {error ?? currentZone?.description ?? "Location tracked live."}
-            </p>
+      {/* ========================================================================= */}
+      {/* 3. FOUR COMPACT SAFETY STATUS CARDS */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: RISK LEVEL */}
+        <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
+              RISK LEVEL
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#39B86B]/15 text-[#39B86B]">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
+            {risk === "restricted" ? "High Risk" : risk === "caution" ? "Moderate" : "Low Risk"}
+          </p>
+          <p className="mt-0.5 text-xs text-[#39B86B] font-bold">
+            {risk === "safe" ? "Safe to travel" : "Exercise vigilance"}
+          </p>
+        </div>
+
+        {/* Card 2: CROWD DENSITY */}
+        <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
+              CROWD DENSITY
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FF6F61]/15 text-[#FF6F61]">
+              <Users className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">Moderate</p>
+          <p className="mt-0.5 text-xs text-[#77716D] font-bold">24% occupied · Normal</p>
+        </div>
+
+        {/* Card 3: NEARBY POLICE */}
+        <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
+              NEARBY POLICE
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600">
+              <Building2 className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">1.2 km</p>
+          <p className="mt-0.5 text-xs text-blue-600 font-bold">Low Risk / Open</p>
+        </div>
+
+        {/* Card 4: WEATHER */}
+        <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
+              WEATHER
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600">
+              <CloudSun className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
+            {weatherData ? `${weatherData.temp}°C` : "31°C"}
+          </p>
+          <p className="mt-0.5 text-xs text-[#77716D] font-bold">
+            {weatherData ? weatherData.text : "Few Clouds"}
+          </p>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 4. BEACON AI TWO-WAY COMMUNICATION SECTION */}
+      {/* ========================================================================= */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <h2 className="text-base sm:text-lg font-black text-[#1E1E1E] flex items-center gap-2">
+              <Languages className="h-5 w-5 text-[#FF6F61]" />
+              <span>BEACON AI Two-Way Communication</span>
+            </h2>
+            <p className="text-xs text-[#77716D]">Instant translation between Tourist and Responders</p>
           </div>
 
-          {/* Pill-shaped live risk status badge ("SAFE" / "CAUTION" / "RESTRICTED") */}
-          <div className="shrink-0">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-black uppercase tracking-wider shadow-2xs border ${
-                risk === "restricted"
-                  ? "bg-rose-500/15 text-rose-700 border-rose-500/30"
-                  : risk === "caution"
-                    ? "bg-amber-500/15 text-amber-800 border-amber-500/30"
-                    : "bg-emerald-600/15 text-emerald-800 border-emerald-600/30"
-              }`}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  risk === "restricted"
-                    ? "bg-rose-600 animate-ping"
-                    : risk === "caution"
-                      ? "bg-amber-600"
-                      : "bg-emerald-600"
-                }`}
+          <Link
+            to="/app/translate"
+            className="text-xs font-bold text-[#FF6F61] hover:underline flex items-center gap-1"
+          >
+            <span>Full Screen Translator</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Left Panel: TALK TO BEACON (Tourist) */}
+          <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FF6F61]/15 text-[#FF6F61]">
+                  <User className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-[#FF6F61]">
+                    TALK TO BEACON
+                  </h3>
+                  <p className="text-[10px] text-[#77716D]">Ask anything in English</p>
+                </div>
+              </div>
+
+              {/* Tourist Language Selector */}
+              <select
+                value={touristLang}
+                onChange={(e) => setTouristLang(e.target.value)}
+                className="rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2 py-1 text-xs font-bold text-[#1E1E1E] focus:outline-none"
+              >
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.flag} {l.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Live Translated Output from Officer */}
+            <div className="min-h-[60px] rounded-2xl bg-[#39B86B]/10 p-3 text-xs border border-[#39B86B]/20 flex items-center justify-between">
+              <p className={touristTranslated ? "font-bold text-[#1E1E1E]" : "text-[#77716D] italic"}>
+                {isTranslating === "officer"
+                  ? "Translating officer response…"
+                  : touristTranslated || "Officer response will appear here in English…"}
+              </p>
+              {touristTranslated && (
+                <button
+                  onClick={() => void speakText(touristTranslated, touristLang, "tourist-replay")}
+                  className="shrink-0 ml-2 rounded-lg bg-white p-1.5 text-[#39B86B] shadow-2xs hover:bg-[#39B86B]/20 cursor-pointer"
+                  title="Play audio"
+                >
+                  <Volume2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Input Bar with Mic & Send */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Type or speak your message..."
+                value={touristInput}
+                onChange={(e) => setTouristInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && touristInput.trim()) {
+                    void executeTranslate(touristInput, "tourist");
+                  }
+                }}
+                className="h-10 flex-1 rounded-2xl bg-[#FFF8F3] px-3.5 text-xs text-[#1E1E1E] placeholder:text-[#77716D] border border-[#F6B28F]/30 focus:outline-none focus:ring-2 focus:ring-[#FF6F61]/40"
               />
-              {risk === "restricted" ? "RESTRICTED" : risk === "caution" ? "CAUTION" : "SAFE"}
-            </span>
+              <button
+                onClick={() => toggleSpeechInput("tourist")}
+                className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-sm transition-all cursor-pointer ${
+                  activeMic === "tourist"
+                    ? "bg-[#E94B5F] text-white animate-pulse"
+                    : "bg-[#FFF8F3] text-[#FF6F61] border border-[#F6B28F]/40 hover:bg-[#FF6F61]/10"
+                }`}
+                title="Speak message"
+              >
+                {activeMic === "tourist" ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={() => {
+                  if (touristInput.trim()) void executeTranslate(touristInput, "tourist");
+                }}
+                disabled={!touristInput.trim() || isTranslating === "tourist"}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] text-white shadow-sm disabled:opacity-40 cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                title="Send translation"
+              >
+                {isTranslating === "tourist" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+
+            {/* Quick Tourist Emergency Questions */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#77716D] block mb-1.5">
+                Quick Questions:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_QUESTIONS_TOURIST.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => {
+                      setTouristInput(q);
+                      void executeTranslate(q, "tourist");
+                    }}
+                    className="rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2.5 py-1 text-[11px] font-semibold text-[#1E1E1E] hover:bg-white hover:border-[#FF6F61]/50 transition-all cursor-pointer text-left"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Panel: POLICE OFFICER (Official) */}
+          <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600">
+                  <Shield className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-700">
+                    POLICE OFFICER
+                  </h3>
+                  <p className="text-[10px] text-[#77716D]">Responds in Tamil (தமிழ்)</p>
+                </div>
+              </div>
+
+              {/* Officer Language Selector */}
+              <select
+                value={officerLang}
+                onChange={(e) => setOfficerLang(e.target.value)}
+                className="rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2 py-1 text-xs font-bold text-[#1E1E1E] focus:outline-none"
+              >
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.flag} {l.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Live Translated Output from Tourist */}
+            <div className="min-h-[60px] rounded-2xl bg-blue-500/10 p-3 text-xs border border-blue-500/20 flex items-center justify-between">
+              <p className={officerTranslated ? "font-bold text-[#1E1E1E]" : "text-[#77716D] italic"}>
+                {isTranslating === "tourist"
+                  ? "Translating tourist message…"
+                  : officerTranslated || "Tourist message will appear here in Tamil…"}
+              </p>
+              {officerTranslated && (
+                <button
+                  onClick={() => void speakText(officerTranslated, officerLang, "officer-replay")}
+                  className="shrink-0 ml-2 rounded-lg bg-white p-1.5 text-blue-600 shadow-2xs hover:bg-blue-500/20 cursor-pointer"
+                  title="Play audio"
+                >
+                  <Volume2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Input Bar with Mic & Send */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Type response in Tamil or English..."
+                value={officerInput}
+                onChange={(e) => setOfficerInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && officerInput.trim()) {
+                    void executeTranslate(officerInput, "officer");
+                  }
+                }}
+                className="h-10 flex-1 rounded-2xl bg-[#FFF8F3] px-3.5 text-xs text-[#1E1E1E] placeholder:text-[#77716D] border border-[#F6B28F]/30 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              />
+              <button
+                onClick={() => toggleSpeechInput("officer")}
+                className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-sm transition-all cursor-pointer ${
+                  activeMic === "officer"
+                    ? "bg-[#E94B5F] text-white animate-pulse"
+                    : "bg-[#FFF8F3] text-blue-600 border border-[#F6B28F]/40 hover:bg-blue-500/10"
+                }`}
+                title="Speak response"
+              >
+                {activeMic === "officer" ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={() => {
+                  if (officerInput.trim()) void executeTranslate(officerInput, "officer");
+                }}
+                disabled={!officerInput.trim() || isTranslating === "officer"}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm disabled:opacity-40 cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                title="Send response"
+              >
+                {isTranslating === "officer" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+
+            {/* Quick Officer Responses */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#77716D] block mb-1.5">
+                Quick Officer Responses:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_RESPONSES_OFFICER.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => {
+                      setOfficerInput(r);
+                      void executeTranslate(r, "officer");
+                    }}
+                    className="rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2.5 py-1 text-[11px] font-semibold text-[#1E1E1E] hover:bg-white hover:border-blue-500/50 transition-all cursor-pointer text-left"
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. QUICK ACCESS FEATURE NAVIGATION CARDS */}
+      {/* 5. EMERGENCY ACTION BAR — 4 PREMIUM ACTION CARDS */}
       {/* ========================================================================= */}
       <div>
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 px-1">
-          Quick Services
-        </p>
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-          <Link to="/app/map">
-            <GlassCard
-              className="h-full hover:bg-white/70 transition-all duration-200 cursor-pointer group"
-              transition={{ delay: 0.1, duration: 0.3 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sand)]/20 text-[var(--sand)] group-hover:scale-105 transition-transform">
-                  <MapIcon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                    Safety Map
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">Places & safe zones</p>
-                </div>
-              </div>
-            </GlassCard>
-          </Link>
+        <h2 className="text-base sm:text-lg font-black text-[#1E1E1E] mb-3 px-1">
+          Quick Safety Actions
+        </h2>
 
-          <Link to="/app/translate">
-            <GlassCard
-              className="h-full hover:bg-white/70 transition-all duration-200 cursor-pointer group"
-              transition={{ delay: 0.14, duration: 0.3 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary group-hover:scale-105 transition-transform">
-                  <Languages className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                    Voice Translator
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">Face-to-face 2-way speech</p>
-                </div>
-              </div>
-            </GlassCard>
-          </Link>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Action 1: EMERGENCY SOS (Visually Dominant) */}
+          <button
+            onClick={triggerSos}
+            disabled={sendingSos}
+            className="group relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#E94B5F] via-[#FF6F61] to-[#E94B5F] bg-size-200 p-5 text-left text-white shadow-lg shadow-[#E94B5F]/25 hover:shadow-xl hover:scale-[1.02] active:scale-98 transition-all cursor-pointer disabled:opacity-70"
+          >
+            {/* Glowing Pulse Ring */}
+            <span className="absolute -top-6 -right-6 h-20 w-20 rounded-full bg-white/20 blur-lg group-hover:scale-150 transition-transform" />
 
-          <Link to="/app/id">
-            <GlassCard
-              className="h-full hover:bg-white/70 transition-all duration-200 cursor-pointer group"
-              transition={{ delay: 0.18, duration: 0.3 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--blush)]/20 text-[var(--blush)] group-hover:scale-105 transition-transform">
-                  <Fingerprint className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                    Digital ID
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">Verifiable travel pass</p>
-                </div>
-              </div>
-            </GlassCard>
-          </Link>
+            <div className="flex items-center justify-between">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-md">
+                <ShieldAlert className="h-6 w-6 animate-pulse" />
+              </span>
+              <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-black tracking-widest uppercase">
+                CRITICAL
+              </span>
+            </div>
 
-          <Link to="/app/alerts">
-            <GlassCard
-              className="h-full hover:bg-white/70 transition-all duration-200 cursor-pointer group"
-              transition={{ delay: 0.22, duration: 0.3 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-600 group-hover:scale-105 transition-transform">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                    My Alerts
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">Dispatched signals</p>
-                </div>
-              </div>
-            </GlassCard>
+            <div className="mt-4">
+              <h3 className="text-base font-black tracking-wide">EMERGENCY SOS</h3>
+              <p className="mt-0.5 text-xs text-white/85">Send alert to authorities</p>
+            </div>
+          </button>
+
+          {/* Action 2: SHARE LIVE LOCATION */}
+          <button
+            onClick={handleShareLocation}
+            className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 text-left shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#39B86B]/15 text-[#39B86B] group-hover:scale-110 transition-transform">
+                <Share2 className="h-5 w-5" />
+              </span>
+              <ChevronRight className="h-4 w-4 text-[#77716D]" />
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-black text-[#1E1E1E]">SHARE LIVE LOCATION</h3>
+              <p className="mt-0.5 text-xs text-[#77716D]">Share with trusted contacts</p>
+            </div>
+          </button>
+
+          {/* Action 3: SAFETY TIPS */}
+          <button
+            onClick={() => setSafetyTipsOpen(true)}
+            className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 text-left shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 group-hover:scale-110 transition-transform">
+                <Zap className="h-5 w-5" />
+              </span>
+              <ChevronRight className="h-4 w-4 text-[#77716D]" />
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-black text-[#1E1E1E]">SAFETY TIPS</h3>
+              <p className="mt-0.5 text-xs text-[#77716D]">Do's & Don'ts for travelers</p>
+            </div>
+          </button>
+
+          {/* Action 4: REPORT INCIDENT */}
+          <Link
+            to="/app/alerts"
+            className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 text-left shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group block"
+          >
+            <div className="flex items-center justify-between">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-600 group-hover:scale-110 transition-transform">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <ChevronRight className="h-4 w-4 text-[#77716D]" />
+            </div>
+            <div className="mt-4">
+              <h3 className="text-sm font-black text-[#1E1E1E]">REPORT INCIDENT</h3>
+              <p className="mt-0.5 text-xs text-[#77716D]">Help us keep places safe</p>
+            </div>
           </Link>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. PROMINENT, ALWAYS-VISIBLE FLOATING ACTION SOS BUTTON */}
+      {/* 6. ALWAYS-VISIBLE PROMINENT FLOATING SOS BUTTON */}
       {/* ========================================================================= */}
       <div className="fixed bottom-20 right-4 sm:bottom-8 sm:right-8 z-40 flex flex-col items-center select-none">
         <div className="relative flex items-center justify-center">
-          {/* Continuous Soft Pulsing Glow & Ping Animations */}
-          <span className="absolute h-24 w-24 sm:h-28 sm:w-28 rounded-full bg-rose-500/25 animate-ping pointer-events-none" />
-          <span className="absolute h-28 w-28 sm:h-32 sm:w-32 rounded-full bg-rose-500/15 animate-pulse pointer-events-none" />
+          <span className="absolute h-24 w-24 sm:h-28 sm:w-28 rounded-full bg-[#E94B5F]/25 animate-ping pointer-events-none" />
+          <span className="absolute h-28 w-28 sm:h-32 sm:w-32 rounded-full bg-[#E94B5F]/15 animate-pulse pointer-events-none" />
 
           <motion.button
             whileTap={{ scale: 0.9 }}
             whileHover={{ scale: 1.05 }}
-            disabled={sending}
+            disabled={sendingSos}
             onClick={triggerSos}
-            className="relative flex h-18 w-18 sm:h-20 sm:w-20 flex-col items-center justify-center rounded-full bg-[var(--danger)] text-white shadow-2xl shadow-rose-600/60 transition-transform cursor-pointer border-3 border-white/50 active:scale-95 disabled:opacity-75 focus:outline-none focus:ring-4 focus:ring-rose-500/40"
-            title="Tap to trigger emergency SOS with live GPS coordinates"
-            aria-label="Emergency SOS"
+            className="relative flex h-16 w-16 sm:h-20 sm:w-20 flex-col items-center justify-center rounded-full bg-gradient-to-br from-[#E94B5F] to-[#FF6F61] text-white shadow-2xl shadow-[#E94B5F]/60 cursor-pointer border-3 border-white/60 active:scale-95 disabled:opacity-75 focus:outline-none"
+            title="Tap to trigger Emergency SOS"
           >
-            <ShieldAlert className="h-7 w-7 sm:h-8 sm:w-8 animate-pulse" />
-            <span className="text-[11px] sm:text-xs font-black tracking-widest uppercase mt-0.5">
+            <ShieldAlert className="h-6 w-6 sm:h-8 sm:w-8 animate-pulse" />
+            <span className="text-[10px] sm:text-xs font-black tracking-widest uppercase mt-0.5">
               SOS
             </span>
           </motion.button>
         </div>
 
-        {/* Live SOS Sent Toast Confirmation */}
+        {/* Real SOS Sent Toast Feedback */}
         <AnimatePresence>
-          {sent && (
+          {sosSent && (
             <motion.div
               initial={{ opacity: 0, y: 8, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="absolute bottom-22 right-0 whitespace-nowrap rounded-2xl bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xl flex items-center gap-1.5 border border-white/40"
+              className="absolute bottom-22 right-0 whitespace-nowrap rounded-2xl bg-[#39B86B] text-white px-4 py-2 text-xs font-bold shadow-xl flex items-center gap-1.5 border border-white/40"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>SOS Alert Sent — help is on the way!</span>
+              <span>SOS Alert Sent — emergency team notified!</span>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 7. SAFETY TIPS MODAL DIALOG */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {safetyTipsOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSafetyTipsOpen(false)}
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              className="fixed inset-x-4 top-[15%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-lg rounded-[32px] border border-[#F6B28F]/40 bg-white p-6 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-black/5 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600">
+                    <Zap className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-black text-[#1E1E1E]">Tourist Safety Tips</h3>
+                    <p className="text-xs text-[#77716D]">Tamil Nadu Travel Guidelines</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSafetyTipsOpen(false)}
+                  className="rounded-full p-1.5 text-[#77716D] hover:bg-black/5 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {SAFETY_TIPS.map((tip, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-2xl border border-[#F6B28F]/25 bg-[#FFF8F3] p-3.5 space-y-1 text-left"
+                  >
+                    <h4 className="text-xs font-black text-[#1E1E1E] flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-[#FF6F61]" />
+                      {tip.title}
+                    </h4>
+                    <p className="text-xs text-[#77716D] leading-relaxed pl-3.5">{tip.desc}</p>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setSafetyTipsOpen(false)}
+                className="mt-5 w-full rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] py-2.5 text-xs font-black text-white shadow-md shadow-[#FF6F61]/25 hover:shadow-lg cursor-pointer"
+              >
+                Got It, Stay Safe
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

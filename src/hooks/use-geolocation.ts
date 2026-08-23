@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 export type Coords = { lat: number; lng: number };
 
@@ -7,7 +7,26 @@ export const DEFAULT_CENTER: Coords = { lat: 13.0827, lng: 80.2707 };
 
 export function useGeolocation() {
   const [coords, setCoords] = useState<Coords | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [timestamp, setTimestamp] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const requestLocation = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setError("Location is not available on this device.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setAccuracy(pos.coords.accuracy);
+        setTimestamp(pos.timestamp);
+        setError(null);
+      },
+      () => setError("Location permission denied — using last known area."),
+      { enableHighAccuracy: true, timeout: 10_000 },
+    );
+  }, []);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -17,6 +36,8 @@ export function useGeolocation() {
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setAccuracy(pos.coords.accuracy);
+        setTimestamp(pos.timestamp);
         setError(null);
       },
       () => setError("Location permission denied — using last known area."),
@@ -25,7 +46,14 @@ export function useGeolocation() {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  return { coords, error, effective: coords ?? DEFAULT_CENTER };
+  return {
+    coords,
+    accuracy,
+    timestamp,
+    error,
+    effective: coords ?? DEFAULT_CENTER,
+    requestLocation,
+  };
 }
 
 /** Great-circle distance in metres between two coordinates. */

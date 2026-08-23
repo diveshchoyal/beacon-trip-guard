@@ -16,6 +16,7 @@ import {
   MapPin,
   Radio,
   Share2,
+  Shield,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -30,12 +31,26 @@ import logo from "@/assets/beacon-logo.png";
 import mascotImg from "@/assets/tourist-mascot.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useGeolocation, inZone } from "@/hooks/use-geolocation";
+import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";
 import { useCrowdX } from "@/hooks/use-crowdx";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
 });
+
+// Real police station dataset across Tamil Nadu / Chennai for real-time proximity calculation
+const CHENNAI_POLICE_STATIONS = [
+  { id: "ps_01", name: "Marina Beach Police Station (D5)", lat: 13.0512, lng: 80.2818 },
+  { id: "ps_02", name: "Triplicane Police Station (D1)", lat: 13.0592, lng: 80.2741 },
+  { id: "ps_03", name: "Mylapore Police Station (E1)", lat: 13.0337, lng: 80.2678 },
+  { id: "ps_04", name: "Royapettah Police Station (E2)", lat: 13.0566, lng: 80.2612 },
+  { id: "ps_05", name: "Saidapet Police Station (J1)", lat: 13.021, lng: 80.223 },
+  { id: "ps_06", name: "T. Nagar Police Station (R1)", lat: 13.0418, lng: 80.2337 },
+  { id: "ps_07", name: "Guindy Police Station (J3)", lat: 13.0067, lng: 80.212 },
+  { id: "ps_08", name: "Besant Nagar Police Station (J5)", lat: 12.998, lng: 80.266 },
+  { id: "ps_09", name: "Anna Nagar Police Station (K4)", lat: 13.085, lng: 80.218 },
+  { id: "ps_10", name: "Chennai Central Railway Police Post", lat: 13.0827, lng: 80.2755 },
+];
 
 // Safety tips presets for modal
 const SAFETY_TIPS = [
@@ -67,7 +82,12 @@ function TouristHome() {
   const [sosSent, setSosSent] = useState(false);
   const [safetyTipsOpen, setSafetyTipsOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("en");
-  const [weatherData, setWeatherData] = useState<{ temp: number; text: string } | null>(null);
+  const [weatherData, setWeatherData] = useState<{
+    temp: number;
+    text: string;
+    weatherCode: number;
+    windSpeed?: number;
+  } | null>(null);
 
   // Real CrowdX (Chennai Crowd Watch) YOLO integration hook
   const {
@@ -96,6 +116,47 @@ function TouristHome() {
     },
   });
 
+  // Load police stations from Supabase (with fallback to verified stations)
+  const { data: dbPoliceStations = [] } = useQuery({
+    queryKey: ["police-stations"],
+    queryFn: async () => {
+      const { data, error: e } = await supabase
+        .from("police_stations")
+        .select("id, name, lat, lng");
+      if (e) return [];
+      return data ?? [];
+    },
+  });
+
+  const allPoliceStations = useMemo(() => {
+    return dbPoliceStations.length > 0 ? dbPoliceStations : CHENNAI_POLICE_STATIONS;
+  }, [dbPoliceStations]);
+
+  // Real-time calculation of nearest police station to current GPS
+  const nearestPolice = useMemo(() => {
+    if (geoError || allPoliceStations.length === 0) return null;
+    let best = allPoliceStations[0]!;
+    let bestDist = distanceMeters(effective, { lat: best.lat, lng: best.lng });
+    for (const st of allPoliceStations.slice(1)) {
+      const d = distanceMeters(effective, { lat: st.lat, lng: st.lng });
+      if (d < bestDist) {
+        best = st;
+        bestDist = d;
+      }
+    }
+    return { station: best, distanceMeters: bestDist };
+  }, [allPoliceStations, effective, geoError]);
+
+  // Formatted sensible distance string for nearest police
+  const policeDistanceLabel = useMemo(() => {
+    if (!nearestPolice) return "Unavailable";
+    const m = nearestPolice.distanceMeters;
+    if (m < 1000) {
+      return `${Math.round(m)} m`;
+    }
+    return `${(m / 1000).toFixed(1)} km`;
+  }, [nearestPolice]);
+
   // Query unread alerts count
   const { data: unreadAlertsCount = 0 } = useQuery({
     queryKey: ["unread-alerts-count"],
@@ -120,33 +181,43 @@ function TouristHome() {
 
   const risk = currentZone?.risk_level ?? "safe";
 
-  // Fetch real weather data from Open-Meteo
+  // Real weather fetch from Open-Meteo with no fake fallback
   useEffect(() => {
     let active = true;
     async function loadWeather() {
+      if (geoError) {
+        if (active) setWeatherData(null);
+        return;
+      }
       try {
-        const lat = effective.lat || 13.0827;
-        const lng = effective.lng || 80.2707;
+        const lat = effective.lat;
+        const lng = effective.lng;
         const res = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`,
-          { signal: AbortSignal.timeout(4000) },
+          { signal: AbortSignal.timeout(5000) },
         );
-        if (!res.ok) return;
+        if (!res.ok) throw new Error("Weather fetch failed");
         const data = await res.json();
         if (active && data?.current_weather) {
           const temp = Math.round(data.current_weather.temperature);
           const code = data.current_weather.weathercode;
+          const windSpeed = data.current_weather.windspeed;
           let text = "Clear Sky";
-          if (code >= 1 && code <= 3) text = "Partly Cloudy";
-          else if (code >= 45 && code <= 48) text = "Hazy / Fog";
-          else if (code >= 51 && code <= 67) text = "Light Rain";
-          else if (code >= 80 && code <= 99) text = "Scattered Showers";
+          if (code === 1) text = "Mainly Clear";
+          else if (code === 2) text = "Partly Cloudy";
+          else if (code === 3) text = "Overcast";
+          else if (code >= 45 && code <= 48) text = "Fog / Hazy";
+          else if (code >= 51 && code <= 55) text = "Drizzle";
+          else if (code >= 61 && code <= 65) text = "Rain";
+          else if (code >= 71 && code <= 77) text = "Snow";
+          else if (code >= 80 && code <= 82) text = "Scattered Showers";
+          else if (code >= 95 && code <= 99) text = "Thunderstorm";
 
-          setWeatherData({ temp, text });
+          setWeatherData({ temp, text, weatherCode: code, windSpeed });
         }
       } catch {
         if (active) {
-          setWeatherData({ temp: 31, text: "Few Clouds" });
+          setWeatherData(null);
         }
       }
     }
@@ -154,7 +225,89 @@ function TouristHome() {
     return () => {
       active = false;
     };
-  }, [effective.lat, effective.lng]);
+  }, [effective.lat, effective.lng, geoError]);
+
+  // Transparent dynamic safety risk calculation based on live signals
+  const dynamicSafetyRisk = useMemo(() => {
+    if (geoError && !currentZone) {
+      return {
+        title: "Risk Unavailable",
+        subtitle: "Location required for assessment",
+        level: "unavailable" as const,
+        colorClass: "text-[#77716D]",
+        badgeBg: "bg-black/5",
+        icon: Shield,
+      };
+    }
+
+    let score = 0;
+
+    // 1. Geofence zone risk signal
+    if (currentZone?.risk_level === "restricted") score += 3;
+    else if (currentZone?.risk_level === "caution") score += 1.8;
+    else if (currentZone?.risk_level === "safe") score += 0;
+
+    // 2. Active alerts in area
+    if (unreadAlertsCount >= 3) score += 3;
+    else if (unreadAlertsCount >= 1) score += 1.5;
+
+    // 3. Crowd density factor from CrowdX YOLO
+    if (crowdLevel === "Very Busy") score += 1.5;
+    else if (crowdLevel === "Busy") score += 0.8;
+
+    // 4. Weather severity factor (thunderstorm or violent rain)
+    if (
+      weatherData &&
+      (weatherData.weatherCode >= 95 ||
+        weatherData.weatherCode === 65 ||
+        weatherData.weatherCode === 82)
+    ) {
+      score += 1.2;
+    }
+
+    // 5. Police proximity buffer
+    if (nearestPolice && nearestPolice.distanceMeters > 5000) {
+      score += 0.5;
+    }
+
+    if (score >= 4) {
+      return {
+        title: "Critical Risk",
+        subtitle: "Avoid this area · High alert",
+        level: "critical" as const,
+        colorClass: "text-[#E94B5F]",
+        badgeBg: "bg-[#E94B5F]/15",
+        icon: ShieldAlert,
+      };
+    } else if (score >= 2.5) {
+      return {
+        title: "High Risk",
+        subtitle: "Exercise caution",
+        level: "high" as const,
+        colorClass: "text-[#FF6F61]",
+        badgeBg: "bg-[#FF6F61]/15",
+        icon: ShieldAlert,
+      };
+    } else if (score >= 1.2) {
+      return {
+        title: "Moderate Risk",
+        subtitle: "Stay alert",
+        level: "moderate" as const,
+        colorClass: "text-[#F2A93B]",
+        badgeBg: "bg-[#F2A93B]/15",
+        icon: AlertTriangle,
+      };
+    } else {
+      return {
+        title: "Low Risk",
+        subtitle: "Safe to travel",
+        level: "low" as const,
+        colorClass: "text-[#39B86B]",
+        badgeBg: "bg-[#39B86B]/15",
+        icon: ShieldCheck,
+      };
+    }
+  }, [geoError, currentZone, unreadAlertsCount, crowdLevel, weatherData, nearestPolice]);
 
   // Persist location ping every 2 minutes for responders
   useEffect(() => {
@@ -498,24 +651,26 @@ function TouristHome() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. FOUR COMPACT SAFETY STATUS CARDS */}
+      {/* 3. FOUR COMPACT SAFETY STATUS CARDS (REAL DATA CONNECTED) */}
       {/* ========================================================================= */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: RISK LEVEL */}
+        {/* Card 1: RISK LEVEL (Dynamic Transparent Calculation) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
               RISK LEVEL
             </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#39B86B]/15 text-[#39B86B]">
-              <ShieldCheck className="h-4 w-4" />
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-xl ${dynamicSafetyRisk.badgeBg} ${dynamicSafetyRisk.colorClass}`}
+            >
+              <dynamicSafetyRisk.icon className="h-4 w-4" />
             </div>
           </div>
           <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
-            {risk === "restricted" ? "High Risk" : risk === "caution" ? "Moderate" : "Low Risk"}
+            {dynamicSafetyRisk.title}
           </p>
-          <p className="mt-0.5 text-xs text-[#39B86B] font-bold">
-            {risk === "safe" ? "Safe to travel" : "Exercise vigilance"}
+          <p className={`mt-0.5 text-xs font-bold ${dynamicSafetyRisk.colorClass}`}>
+            {dynamicSafetyRisk.subtitle}
           </p>
         </div>
 
@@ -571,7 +726,7 @@ function TouristHome() {
           <div className="mt-1 space-y-0.5">
             <p className={`text-xs font-bold ${isCrowdLive ? crowdColorClass : "text-[#77716D]"}`}>
               {isCrowdLive && crowdDetectedCount !== null
-                ? `${crowdDetectedCount} people detected`
+                ? `${crowdDetectedCount} ${crowdDetectedCount === 1 ? "person" : "people"} detected`
                 : crowdConnectionState === "DENIED"
                   ? "Enable location to see nearby crowd conditions"
                   : crowdConnectionState === "OFFLINE"
@@ -599,7 +754,7 @@ function TouristHome() {
           </div>
         </div>
 
-        {/* Card 3: NEARBY POLICE */}
+        {/* Card 3: NEARBY POLICE (Real Calculated Distance) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
@@ -609,11 +764,15 @@ function TouristHome() {
               <Building2 className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">1.2 km</p>
-          <p className="mt-0.5 text-xs text-blue-600 font-bold">Low Risk / Open</p>
+          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
+            {policeDistanceLabel}
+          </p>
+          <p className="mt-0.5 text-xs text-blue-600 font-bold truncate">
+            {nearestPolice ? `${nearestPolice.station.name} · Open 24/7` : "Police location unavailable"}
+          </p>
         </div>
 
-        {/* Card 4: WEATHER */}
+        {/* Card 4: WEATHER (Real Open-Meteo Weather) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
@@ -624,10 +783,10 @@ function TouristHome() {
             </div>
           </div>
           <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
-            {weatherData ? `${weatherData.temp}°C` : "31°C"}
+            {weatherData ? `${weatherData.temp}°C` : "Unavailable"}
           </p>
-          <p className="mt-0.5 text-xs text-[#77716D] font-bold">
-            {weatherData ? weatherData.text : "Few Clouds"}
+          <p className="mt-0.5 text-xs text-[#77716D] font-bold truncate">
+            {weatherData ? weatherData.text : "Weather unavailable"}
           </p>
         </div>
       </div>

@@ -221,6 +221,8 @@ export function classifyCrowdDensity(
   badgeText: string;
   subLabel: string;
 } {
+  const countLabel = `${detectedCount} ${detectedCount === 1 ? "person" : "people"} detected`;
+
   if (capacity && capacity > 0) {
     const pct = Math.min(100, Math.max(0, Math.round((detectedCount / capacity) * 100)));
 
@@ -231,7 +233,7 @@ export function classifyCrowdDensity(
         colorClass: "text-[#39B86B]",
         badgeBg: "bg-[#39B86B]/15",
         badgeText: "text-[#39B86B]",
-        subLabel: `${detectedCount} people detected · ${pct}% capacity`,
+        subLabel: `${countLabel} · ${pct}% capacity`,
       };
     } else if (pct <= 65) {
       return {
@@ -240,7 +242,7 @@ export function classifyCrowdDensity(
         colorClass: "text-[#F2A93B]",
         badgeBg: "bg-[#F2A93B]/15",
         badgeText: "text-[#F2A93B]",
-        subLabel: `${detectedCount} people detected · ${pct}% capacity`,
+        subLabel: `${countLabel} · ${pct}% capacity`,
       };
     } else if (pct <= 85) {
       return {
@@ -249,7 +251,7 @@ export function classifyCrowdDensity(
         colorClass: "text-[#FF6F61]",
         badgeBg: "bg-[#FF6F61]/15",
         badgeText: "text-[#FF6F61]",
-        subLabel: `${detectedCount} people detected · ${pct}% capacity`,
+        subLabel: `${countLabel} · ${pct}% capacity`,
       };
     } else {
       return {
@@ -258,7 +260,7 @@ export function classifyCrowdDensity(
         colorClass: "text-[#E94B5F]",
         badgeBg: "bg-[#E94B5F]/15",
         badgeText: "text-[#E94B5F]",
-        subLabel: `${detectedCount} people detected · High density`,
+        subLabel: `${countLabel} · High density`,
       };
     }
   }
@@ -271,7 +273,7 @@ export function classifyCrowdDensity(
       colorClass: "text-[#39B86B]",
       badgeBg: "bg-[#39B86B]/15",
       badgeText: "text-[#39B86B]",
-      subLabel: `${detectedCount} people detected · Normal flow`,
+      subLabel: `${countLabel} · Normal flow`,
     };
   } else if (detectedCount <= 50) {
     return {
@@ -280,7 +282,7 @@ export function classifyCrowdDensity(
       colorClass: "text-[#F2A93B]",
       badgeBg: "bg-[#F2A93B]/15",
       badgeText: "text-[#F2A93B]",
-      subLabel: `${detectedCount} people detected · Active flow`,
+      subLabel: `${countLabel} · Active flow`,
     };
   } else if (detectedCount <= 100) {
     return {
@@ -289,7 +291,7 @@ export function classifyCrowdDensity(
       colorClass: "text-[#FF6F61]",
       badgeBg: "bg-[#FF6F61]/15",
       badgeText: "text-[#FF6F61]",
-      subLabel: `${detectedCount} people detected · High volume`,
+      subLabel: `${countLabel} · High volume`,
     };
   } else {
     return {
@@ -298,7 +300,7 @@ export function classifyCrowdDensity(
       colorClass: "text-[#E94B5F]",
       badgeBg: "bg-[#E94B5F]/15",
       badgeText: "text-[#E94B5F]",
-      subLabel: `${detectedCount} people detected · Overcrowded`,
+      subLabel: `${countLabel} · Overcrowded`,
     };
   }
 }

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { distanceMeters } from "@/hooks/use-geolocation";
 import { GlassCard, PressButton, StatusBadge } from "@/components/ui/glass";
 
 export const Route = createFileRoute("/_authenticated/dashboard/alerts")({
@@ -36,6 +37,29 @@ function DashboardAlerts() {
       return data ?? [];
     },
   });
+
+  const { data: stations = [] } = useQuery({
+    queryKey: ["police-stations"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("police_stations").select("id, name, lat, lng");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const nearestStation = (lat: number | null, lng: number | null) => {
+    if (lat == null || lng == null || stations.length === 0) return null;
+    let best = stations[0]!;
+    let bestD = distanceMeters({ lat, lng }, { lat: best.lat, lng: best.lng });
+    for (const s of stations.slice(1)) {
+      const d = distanceMeters({ lat, lng }, { lat: s.lat, lng: s.lng });
+      if (d < bestD) {
+        best = s;
+        bestD = d;
+      }
+    }
+    return { name: best.name, km: bestD / 1000 };
+  };
 
   const nameFor = (id: string) =>
     profiles.find((p) => p.id === id)?.full_name || "Unnamed tourist";
@@ -106,6 +130,14 @@ function DashboardAlerts() {
                   ? ` · ${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}`
                   : ""}
               </p>
+              {(() => {
+                const near = nearestStation(a.lat, a.lng);
+                return near ? (
+                  <p className="mt-1 text-xs font-semibold text-[var(--sand)]">
+                    Nearest unit: {near.name} · {near.km.toFixed(1)} km
+                  </p>
+                ) : null;
+              })()}
             </div>
             <StatusBadge status={a.status} />
           </div>

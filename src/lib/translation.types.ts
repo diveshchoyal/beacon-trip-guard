@@ -58,3 +58,71 @@ export interface SpeechRecognitionLike {
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
 }
+
+// Asynchronously loads available voices, waiting for the voiceschanged event if initially empty
+export async function getLoadedVoices(): Promise<SpeechSynthesisVoice[]> {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    return [];
+  }
+
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) return voices;
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve(window.speechSynthesis.getVoices());
+      }
+    }, 600);
+
+    const onVoices = () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+        resolve(window.speechSynthesis.getVoices());
+      }
+    };
+
+    window.speechSynthesis.addEventListener("voiceschanged", onVoices);
+  });
+}
+
+// Finds an exact, prefix, or named matching voice for a language code
+export function findMatchingVoice(
+  voices: SpeechSynthesisVoice[],
+  langCode: string,
+): SpeechSynthesisVoice | null {
+  if (!voices || voices.length === 0) return null;
+
+  const langConfig = SUPPORTED_LANGUAGES.find((l) => l.code === langCode);
+  const speechCode = (langConfig?.speechCode || langCode).toLowerCase().replace("_", "-");
+  const baseCode = langCode.toLowerCase().split("-")[0];
+  const langName = langConfig?.name.toLowerCase() || "";
+  const nativeName = langConfig?.nativeName.toLowerCase() || "";
+
+  // 1. Exact match (e.g. "ta-in" === "ta-in")
+  let match = voices.find((v) => v.lang.toLowerCase().replace("_", "-") === speechCode);
+  if (match) return match;
+
+  // 2. Prefix match (e.g. "ta-lk", "ta-sg", "ta")
+  match = voices.find((v) => {
+    const vLang = v.lang.toLowerCase().replace("_", "-");
+    return vLang.startsWith(baseCode + "-") || vLang === baseCode;
+  });
+  if (match) return match;
+
+  // 3. Name match in voice name (e.g. "Google Tamil", "Microsoft Valluvar")
+  match = voices.find((v) => {
+    const vName = v.name.toLowerCase();
+    return (
+      (langName && vName.includes(langName)) ||
+      (nativeName && vName.includes(nativeName))
+    );
+  });
+  if (match) return match;
+
+  return null;
+}

@@ -17,6 +17,7 @@ import {
   VolumeX,
   Smartphone,
   Info,
+  Volume1,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,6 +30,8 @@ import {
   type SpeechRecognitionLike,
   type SpeechRecognitionEventLike,
   type SpeechRecognitionErrorEventLike,
+  getLoadedVoices,
+  findMatchingVoice,
 } from "@/lib/translation.types";
 
 export const Route = createFileRoute("/_authenticated/app/translate")({
@@ -68,73 +71,94 @@ function VoiceTranslatorScreen() {
   const [speechSupported, setSpeechSupported] = useState<boolean>(true);
   const [micPermissionDenied, setMicPermissionDenied] = useState<boolean>(false);
   const [isFaceToFaceRotated, setIsFaceToFaceRotated] = useState<boolean>(true);
+  const [installedVoices, setInstalledVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [history, setHistory] = useState<DialogueEntry[]>([]);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
-  // Check speech recognition support and microphone availability on mount
+  // Check speech recognition support and load voices on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const hasSpeech = "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
       setSpeechSupported(Boolean(hasSpeech));
 
-      // Warm up SpeechSynthesis voices for iOS Safari / Chrome
       if ("speechSynthesis" in window) {
-        window.speechSynthesis.getVoices();
-        window.speechSynthesis.onvoiceschanged = () => {
-          window.speechSynthesis.getVoices();
+        void getLoadedVoices().then((voices) => {
+          setInstalledVoices(voices);
+        });
+
+        const onVoicesChanged = () => {
+          const v = window.speechSynthesis.getVoices();
+          if (v.length > 0) {
+            setInstalledVoices(v);
+          }
+        };
+
+        window.speechSynthesis.addEventListener("voiceschanged", onVoicesChanged);
+        return () => {
+          window.speechSynthesis.removeEventListener("voiceschanged", onVoicesChanged);
         };
       }
     }
   }, []);
 
-  // Text-to-Speech function that works reliably across all devices
-  const speakText = useCallback((text: string, langCode: string, entryId?: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      console.warn("SpeechSynthesis not supported on this browser.");
-      return;
-    }
-
-    try {
-      window.speechSynthesis.cancel();
-
-      const langConfig = SUPPORTED_LANGUAGES.find((l) => l.code === langCode);
-      const speechCode = langConfig?.speechCode || langCode;
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = speechCode;
-      utterance.rate = 0.92;
-      utterance.pitch = 1.0;
-
-      // Assign matching voice if available
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        const matchingVoice =
-          voices.find((v) => v.lang === speechCode) ||
-          voices.find((v) => v.lang.startsWith(langCode)) ||
-          voices.find((v) => v.lang.toLowerCase().includes(langCode.toLowerCase()));
-        if (matchingVoice) {
-          utterance.voice = matchingVoice;
-        }
+  // Text-to-Speech function that validates voice availability before playing
+  const speakText = useCallback(
+    async (text: string, langCode: string, entryId?: string) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        console.warn("SpeechSynthesis not supported on this browser.");
+        return;
       }
 
-      if (entryId) setIsPlayingAudio(entryId);
+      if (!text.trim()) return;
 
-      utterance.onend = () => {
+      const langConfig = SUPPORTED_LANGUAGES.find((l) => l.code === langCode);
+      const langName = langConfig?.name || langCode;
+
+      // 1. Ensure latest voices list is retrieved
+      const voices = installedVoices.length > 0 ? installedVoices : await getLoadedVoices();
+      if (voices.length > 0 && installedVoices.length === 0) {
+        setInstalledVoices(voices);
+      }
+
+      // 2. Check if a matching voice is installed for this language
+      const matchingVoice = findMatchingVoice(voices, langCode);
+
+      if (!matchingVoice) {
+        console.warn(`No TTS voice installed on this device for ${langName} (${langCode}).`);
         setIsPlayingAudio(null);
-      };
+        return;
+      }
 
-      utterance.onerror = (e) => {
-        console.warn("TTS utterance error:", e);
+      // 3. Play audio using the verified matching voice
+      try {
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text.trim());
+        utterance.voice = matchingVoice;
+        utterance.lang = matchingVoice.lang;
+        utterance.rate = 0.92;
+        utterance.pitch = 1.0;
+
+        if (entryId) setIsPlayingAudio(entryId);
+
+        utterance.onend = () => {
+          setIsPlayingAudio(null);
+        };
+
+        utterance.onerror = (e) => {
+          console.warn("TTS playback error:", e);
+          setIsPlayingAudio(null);
+        };
+
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.error("Failed to execute TTS:", err);
         setIsPlayingAudio(null);
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch (err) {
-      console.error("Failed to execute TTS:", err);
-      setIsPlayingAudio(null);
-    }
-  }, []);
+      }
+    },
+    [installedVoices],
+  );
 
   // Perform translation call via Supabase Edge Function with resilient fallback
   const handleTranslate = useCallback(
@@ -211,8 +235,8 @@ function VoiceTranslatorScreen() {
 
         setHistory((prev) => [newEntry, ...prev]);
 
-        // Automatically speak aloud in the target speaker's panel for all input sources
-        speakText(resultText, targetLang, newEntry.id);
+        // Automatically speak aloud in the target speaker's panel if a voice is installed
+        void speakText(resultText, targetLang, newEntry.id);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Network error";
         console.error("Translation error:", err);
@@ -368,19 +392,24 @@ function VoiceTranslatorScreen() {
   const touristConfig = SUPPORTED_LANGUAGES.find((l) => l.code === touristLang)!;
   const officerConfig = SUPPORTED_LANGUAGES.find((l) => l.code === officerLang)!;
 
+  // Check voice availability for current selections
+  const hasTouristVoice = Boolean(findMatchingVoice(installedVoices, touristLang));
+  const hasOfficerVoice = Boolean(findMatchingVoice(installedVoices, officerLang));
+
   // Reusable panel render function
   const renderPanel = (role: SpeakerRole, isRotated: boolean = false) => {
     const isTourist = role === "tourist";
     const currentLang = isTourist ? touristLang : officerLang;
     const setLang = isTourist ? setTouristLang : setOfficerLang;
     const config = isTourist ? touristConfig : officerConfig;
-    const otherConfig = isTourist ? officerConfig : touristConfig;
     const transcript = isTourist ? touristTranscript : officerTranscript;
     const setTranscript = isTourist ? setTouristTranscript : setOfficerTranscript;
     const translatedText = isTourist ? touristTranslated : officerTranslated;
+    const hasTargetVoice = isTourist ? hasTouristVoice : hasOfficerVoice;
     const otherRole: SpeakerRole = isTourist ? "officer" : "tourist";
     const isCurrentActive = activeSpeaker === role;
     const isCurrentTranslating = isTranslating === otherRole;
+    const isThisPlaying = isPlayingAudio === `${role}-translated` || isPlayingAudio?.startsWith(role);
 
     return (
       <GlassCard
@@ -439,7 +468,7 @@ function VoiceTranslatorScreen() {
           </div>
 
           {/* Translated Content Received from the Other Speaker */}
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between text-[11px] font-semibold text-foreground">
               <span className="flex items-center gap-1">
                 <Sparkles
@@ -449,17 +478,43 @@ function VoiceTranslatorScreen() {
                   Translated from {isTourist ? "Officer" : "Tourist"} ({config.name}):
                 </span>
               </span>
+
+              {/* Audio Playback State / Visual Indicator */}
               {translatedText && (
-                <button
-                  onClick={() => speakText(translatedText, currentLang, `${role}-translated`)}
-                  className="flex items-center gap-1 rounded-lg bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-foreground hover:bg-white shadow-xs cursor-pointer border border-white/70"
-                >
-                  <Volume2 className="h-3 w-3 text-primary" />
-                  <span>Play Audio</span>
-                </button>
+                <div>
+                  {isThisPlaying ? (
+                    <div className="flex items-center gap-1 rounded-lg bg-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary animate-pulse border border-primary/30">
+                      <Volume2 className="h-3 w-3 animate-bounce text-primary" />
+                      <span>Speaking…</span>
+                    </div>
+                  ) : hasTargetVoice ? (
+                    <button
+                      onClick={() => void speakText(translatedText, currentLang, `${role}-translated`)}
+                      className="flex items-center gap-1 rounded-lg bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-foreground hover:bg-white shadow-xs cursor-pointer border border-white/70"
+                      title={`Play ${config.name} voice audio`}
+                    >
+                      <Volume1 className="h-3 w-3 text-primary" />
+                      <span>Play Audio</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        toast.info(
+                          `No ${config.name} voice installed on this device. You can download one in device settings.`,
+                        )
+                      }
+                      className="flex items-center gap-1 rounded-lg bg-black/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-black/10 cursor-pointer"
+                      title={`No ${config.name} voice installed on this device`}
+                    >
+                      <VolumeX className="h-3 w-3 text-muted-foreground" />
+                      <span>No {config.name} Voice</span>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
+            {/* Translated Text Display Box */}
             <div
               className={`min-h-[75px] w-full rounded-2xl p-3 text-xs sm:text-sm font-medium shadow-inner backdrop-blur-md flex items-center justify-center ${
                 isTourist
@@ -482,6 +537,26 @@ function VoiceTranslatorScreen() {
                 </p>
               )}
             </div>
+
+            {/* Graceful Inline Fallback Notice When No Voice Is Installed for this language */}
+            {translatedText && !hasTargetVoice && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-2 text-[11px] text-amber-950 flex items-start gap-1.5 backdrop-blur-md"
+              >
+                <VolumeX className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">
+                    No {config.name} voice installed on this device
+                  </span>{" "}
+                  — showing text only.
+                  <span className="text-amber-900/80 block mt-0.5 text-[10px]">
+                    You can add a {config.name} voice in your device's language / accessibility settings.
+                  </span>
+                </div>
+              </motion.div>
+            )}
           </div>
 
           {/* Spoken / Typed Input for this Speaker */}
@@ -509,7 +584,10 @@ function VoiceTranslatorScreen() {
                     : "text-muted-foreground/60 italic text-[11px]"
                 }
               >
-                {transcript || (speechSupported ? `Tap mic below or type in ${config.name}…` : `Type your message in ${config.name}…`)}
+                {transcript ||
+                  (speechSupported
+                    ? `Tap mic below or type in ${config.name}…`
+                    : `Type your message in ${config.name}…`)}
               </p>
 
               {/* Manual Input Bar */}
@@ -608,7 +686,7 @@ function VoiceTranslatorScreen() {
           ) : (
             <div className="rounded-xl bg-black/5 px-3 py-1.5 text-[11px] text-muted-foreground flex items-center gap-1.5">
               <Info className="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span>Type your message above to translate & hear audio</span>
+              <span>Type your message above to translate</span>
             </div>
           )}
         </div>
@@ -681,7 +759,7 @@ function VoiceTranslatorScreen() {
                 Voice input isn't supported in this browser.
               </p>
               <p className="text-amber-900/80 mt-0.5">
-                Please use Chrome on Android for live microphone recognition, or type your message in the text box below. Audio translation will still play aloud automatically.
+                Please use Chrome on Android for live microphone recognition, or type your message in the text box below. Audio translation will still play aloud automatically where voices are installed.
               </p>
             </div>
           </div>
@@ -748,6 +826,8 @@ function VoiceTranslatorScreen() {
               {history.map((entry) => {
                 const isTourist = entry.speaker === "tourist";
                 const isAudioPlaying = isPlayingAudio === entry.id;
+                const entryVoice = findMatchingVoice(installedVoices, entry.targetLang);
+                const targetCfg = SUPPORTED_LANGUAGES.find((l) => l.code === entry.targetLang);
 
                 return (
                   <motion.div
@@ -801,24 +881,39 @@ function VoiceTranslatorScreen() {
                           <p className="font-semibold text-foreground">{entry.translatedText}</p>
                         </div>
                         <div className="mt-2 self-end">
-                          <button
-                            onClick={() =>
-                              speakText(entry.translatedText, entry.targetLang, entry.id)
-                            }
-                            className="flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline cursor-pointer"
-                          >
-                            {isAudioPlaying ? (
-                              <>
-                                <VolumeX className="h-3 w-3 animate-pulse" />
-                                <span>Playing…</span>
-                              </>
-                            ) : (
-                              <>
-                                <Volume2 className="h-3 w-3" />
-                                <span>Replay Audio</span>
-                              </>
-                            )}
-                          </button>
+                          {entryVoice ? (
+                            <button
+                              onClick={() =>
+                                void speakText(entry.translatedText, entry.targetLang, entry.id)
+                              }
+                              className="flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline cursor-pointer"
+                            >
+                              {isAudioPlaying ? (
+                                <span className="flex items-center gap-1 font-bold text-primary animate-pulse">
+                                  <Volume2 className="h-3 w-3 animate-bounce" />
+                                  <span>Playing audio…</span>
+                                </span>
+                              ) : (
+                                <>
+                                  <Volume2 className="h-3 w-3" />
+                                  <span>Replay Audio</span>
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <span
+                              onClick={() => {
+                                toast.info(
+                                  `No ${targetCfg?.name || entry.targetLang} voice installed on this device.`,
+                                );
+                              }}
+                              className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground/70 cursor-pointer hover:text-muted-foreground"
+                              title="No voice installed for this language on this device"
+                            >
+                              <VolumeX className="h-3 w-3" />
+                              <span>Text only (no voice)</span>
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

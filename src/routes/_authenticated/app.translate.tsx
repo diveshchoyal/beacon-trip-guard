@@ -38,6 +38,14 @@ export const Route = createFileRoute("/_authenticated/app/translate")({
   component: VoiceTranslatorScreen,
 });
 
+interface QueueItem {
+  id: string;
+  text: string;
+  speaker: SpeakerRole;
+  sourceLang: string;
+  targetLang: string;
+}
+
 // Quick emergency phrase suggestions
 const QUICK_PHRASES: Record<SpeakerRole, string[]> = {
   tourist: [
@@ -74,7 +82,19 @@ function VoiceTranslatorScreen() {
   const [installedVoices, setInstalledVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [history, setHistory] = useState<DialogueEntry[]>([]);
 
+  // Refs for race-condition prevention and strict ordered execution
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const sessionRef = useRef<{
+    speaker: SpeakerRole | null;
+    finalAccumulated: string;
+    interimLive: string;
+  }>({
+    speaker: null,
+    finalAccumulated: "",
+    interimLive: "",
+  });
+  const translationQueueRef = useRef<QueueItem[]>([]);
+  const isProcessingQueueRef = useRef<boolean>(false);
 
   // Check speech recognition support and load voices on mount
   useEffect(() => {
@@ -160,24 +180,27 @@ function VoiceTranslatorScreen() {
     [installedVoices],
   );
 
-  // Perform translation call via Supabase Edge Function with resilient fallback
-  const handleTranslate = useCallback(
-    async (text: string, speaker: SpeakerRole) => {
-      if (!text.trim()) return;
+  // Sequential translation worker: processes queued translation requests in strict FIFO order
+  const processQueue = useCallback(async () => {
+    if (isProcessingQueueRef.current) return;
+    isProcessingQueueRef.current = true;
 
-      const sourceLang = speaker === "tourist" ? touristLang : officerLang;
-      const targetLang = speaker === "tourist" ? officerLang : touristLang;
+    while (translationQueueRef.current.length > 0) {
+      const item = translationQueueRef.current.shift();
+      if (!item || !item.text.trim()) continue;
 
-      setIsTranslating(speaker);
+      setIsTranslating(item.speaker);
 
       try {
+        const sourceLang = item.sourceLang;
+        const targetLang = item.targetLang;
         let resultText = "";
 
         // 1. Try Supabase Edge Function first
         try {
           const { data, error } = await supabase.functions.invoke("translate-text", {
             body: {
-              text: text.trim(),
+              text: item.text.trim(),
               source_lang: sourceLang,
               target_lang: targetLang,
             },
@@ -187,7 +210,7 @@ function VoiceTranslatorScreen() {
             resultText = (data as { translated_text: string }).translated_text;
           }
         } catch {
-          // Edge function call failed or not deployed yet, proceed to client fallback
+          // Fallback to client translation API if Edge Function is unavailable
         }
 
         // 2. Direct fallback to free translation API if edge function is unavailable
@@ -195,10 +218,10 @@ function VoiceTranslatorScreen() {
           const src = sourceLang.toLowerCase().split("-")[0];
           const tgt = targetLang.toLowerCase().split("-")[0];
           if (src === tgt) {
-            resultText = text.trim();
+            resultText = item.text.trim();
           } else {
-            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.trim())}&langpair=${src}|${tgt}`;
-            const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(item.text.trim())}&langpair=${src}|${tgt}`;
+            const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
             if (res.ok) {
               const json = await res.json();
               if (json?.responseData?.translatedText) {
@@ -214,29 +237,31 @@ function VoiceTranslatorScreen() {
         }
 
         if (!resultText) {
-          resultText = text.trim();
+          resultText = item.text.trim();
         }
 
-        if (speaker === "tourist") {
+        // Update the correct recipient panel with THIS exact utterance's translation
+        if (item.speaker === "tourist") {
           setOfficerTranslated(resultText);
         } else {
           setTouristTranslated(resultText);
         }
 
+        // Build conversation entry with guaranteed match between original and translated text
         const newEntry: DialogueEntry = {
-          id: Math.random().toString(36).slice(2, 9),
-          speaker,
-          originalText: text.trim(),
+          id: item.id,
+          speaker: item.speaker,
+          originalText: item.text.trim(),
           translatedText: resultText,
-          sourceLang,
-          targetLang,
+          sourceLang: item.sourceLang,
+          targetLang: item.targetLang,
           timestamp: new Date(),
         };
 
         setHistory((prev) => [newEntry, ...prev]);
 
-        // Automatically speak aloud in the target speaker's panel if a voice is installed
-        void speakText(resultText, targetLang, newEntry.id);
+        // Speak aloud in the recipient's language
+        void speakText(resultText, item.targetLang, newEntry.id);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Network error";
         console.error("Translation error:", err);
@@ -244,8 +269,32 @@ function VoiceTranslatorScreen() {
       } finally {
         setIsTranslating(null);
       }
+    }
+
+    isProcessingQueueRef.current = false;
+  }, [speakText]);
+
+  // Enqueues an utterance into the sequential translation pipeline
+  const enqueueTranslation = useCallback(
+    (text: string, speaker: SpeakerRole) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      const sourceLang = speaker === "tourist" ? touristLang : officerLang;
+      const targetLang = speaker === "tourist" ? officerLang : touristLang;
+
+      const queueItem: QueueItem = {
+        id: Math.random().toString(36).slice(2, 9),
+        text: trimmed,
+        speaker,
+        sourceLang,
+        targetLang,
+      };
+
+      translationQueueRef.current.push(queueItem);
+      void processQueue();
     },
-    [touristLang, officerLang, speakText],
+    [touristLang, officerLang, processQueue],
   );
 
   // Stop active speech recognition
@@ -261,7 +310,7 @@ function VoiceTranslatorScreen() {
     setActiveSpeaker(null);
   }, []);
 
-  // Start speech recognition for a specific role
+  // Start speech recognition for a specific role with strict session capturing
   const startListening = useCallback(
     (speaker: SpeakerRole) => {
       if (typeof window === "undefined") return;
@@ -289,11 +338,15 @@ function VoiceTranslatorScreen() {
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
 
-        let finalTranscript = "";
-
         recognition.onstart = () => {
           setActiveSpeaker(speaker);
           setMicPermissionDenied(false);
+          sessionRef.current = {
+            speaker,
+            finalAccumulated: "",
+            interimLive: "",
+          };
+
           if (speaker === "tourist") {
             setTouristTranscript("");
           } else {
@@ -301,22 +354,37 @@ function VoiceTranslatorScreen() {
           }
         };
 
+        // Capture live results, cleanly separating final chunks from interim
         recognition.onresult = (event: SpeechRecognitionEventLike) => {
           let interim = "";
+          let finalChunk = "";
+
           for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i]![0]!.transcript;
-            if (event.results[i]!.isFinal) {
-              finalTranscript += transcript;
+            const res = event.results[i];
+            if (!res || !res[0]) continue;
+            const transcript = res[0].transcript;
+            if (res.isFinal) {
+              finalChunk += transcript;
             } else {
               interim += transcript;
             }
           }
 
-          const currentText = finalTranscript || interim;
+          if (finalChunk) {
+            sessionRef.current.finalAccumulated +=
+              (sessionRef.current.finalAccumulated ? " " : "") + finalChunk.trim();
+          }
+          sessionRef.current.interimLive = interim;
+
+          const liveDisplay = (
+            sessionRef.current.finalAccumulated +
+            (interim ? (sessionRef.current.finalAccumulated ? " " : "") + interim : "")
+          ).trim();
+
           if (speaker === "tourist") {
-            setTouristTranscript(currentText);
+            setTouristTranscript(liveDisplay);
           } else {
-            setOfficerTranscript(currentText);
+            setOfficerTranscript(liveDisplay);
           }
         };
 
@@ -331,13 +399,26 @@ function VoiceTranslatorScreen() {
           stopListening();
         };
 
+        // On recognition completion, extract ONLY the final spoken utterance from the session ref
         recognition.onend = () => {
           setActiveSpeaker(null);
-          const completedText =
-            speaker === "tourist" ? touristTranscript || finalTranscript : officerTranscript || finalTranscript;
+          recognitionRef.current = null;
 
-          if (completedText && completedText.trim()) {
-            void handleTranslate(completedText.trim(), speaker);
+          const finalSpoken =
+            sessionRef.current.finalAccumulated.trim() || sessionRef.current.interimLive.trim();
+
+          // Reset session ref
+          sessionRef.current = { speaker: null, finalAccumulated: "", interimLive: "" };
+
+          if (finalSpoken) {
+            if (speaker === "tourist") {
+              setTouristTranscript(finalSpoken);
+            } else {
+              setOfficerTranscript(finalSpoken);
+            }
+
+            // Enqueue strictly for translation
+            enqueueTranslation(finalSpoken, speaker);
           }
         };
 
@@ -351,7 +432,7 @@ function VoiceTranslatorScreen() {
         setActiveSpeaker(null);
       }
     },
-    [touristLang, officerLang, stopListening, handleTranslate, touristTranscript, officerTranscript],
+    [touristLang, officerLang, stopListening, enqueueTranslation],
   );
 
   // Toggle mic for a speaker
@@ -381,6 +462,8 @@ function VoiceTranslatorScreen() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    translationQueueRef.current = [];
+    sessionRef.current = { speaker: null, finalAccumulated: "", interimLive: "" };
     setTouristTranscript("");
     setOfficerTranscript("");
     setTouristTranslated("");
@@ -406,9 +489,8 @@ function VoiceTranslatorScreen() {
     const setTranscript = isTourist ? setTouristTranscript : setOfficerTranscript;
     const translatedText = isTourist ? touristTranslated : officerTranslated;
     const hasTargetVoice = isTourist ? hasTouristVoice : hasOfficerVoice;
-    const otherRole: SpeakerRole = isTourist ? "officer" : "tourist";
     const isCurrentActive = activeSpeaker === role;
-    const isCurrentTranslating = isTranslating === otherRole;
+    const isCurrentTranslating = isTranslating === role;
     const isThisPlaying = isPlayingAudio === `${role}-translated` || isPlayingAudio?.startsWith(role);
 
     return (
@@ -525,7 +607,7 @@ function VoiceTranslatorScreen() {
               {isCurrentTranslating ? (
                 <div className="flex items-center gap-2 text-xs font-semibold text-primary">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Translating incoming speech…</span>
+                  <span>Translating incoming utterance…</span>
                 </div>
               ) : translatedText ? (
                 <p className="text-sm font-semibold leading-relaxed text-left w-full">
@@ -599,7 +681,7 @@ function VoiceTranslatorScreen() {
                   onChange={(e) => setTranscript(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && transcript.trim()) {
-                      void handleTranslate(transcript, role);
+                      enqueueTranslation(transcript, role);
                     }
                   }}
                   className="h-8 flex-1 rounded-xl bg-white/90 px-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary border border-white/80"
@@ -607,7 +689,7 @@ function VoiceTranslatorScreen() {
                 <button
                   onClick={() => {
                     if (transcript.trim()) {
-                      void handleTranslate(transcript, role);
+                      enqueueTranslation(transcript, role);
                     }
                   }}
                   disabled={!transcript.trim() || isTranslating === role}
@@ -637,7 +719,7 @@ function VoiceTranslatorScreen() {
                   key={phrase}
                   onClick={() => {
                     setTranscript(phrase);
-                    void handleTranslate(phrase, role);
+                    enqueueTranslation(phrase, role);
                   }}
                   className="rounded-lg border border-white/70 bg-white/60 px-2 py-0.5 text-[10px] text-foreground hover:bg-white transition-colors cursor-pointer text-left shadow-xs"
                 >

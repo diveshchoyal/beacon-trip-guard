@@ -12,4 +12,13 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      allowedHosts: [
+        "clash-ought-pacific.ngrok-free.dev",
+        ".ngrok-free.dev",
+        ".ngrok-free.app",
+      ],
+    },
+  },
 });

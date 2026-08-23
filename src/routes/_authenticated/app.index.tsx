@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -9,31 +9,18 @@ import {
   CheckCircle2,
   ChevronRight,
   CloudSun,
-  Copy,
   Fingerprint,
-  Globe,
   Home,
-  Info,
   Languages,
-  Loader2,
-  LogOut,
   Map as MapIcon,
   MapPin,
-  Mic,
-  MicOff,
-  Navigation,
   Radio,
-  Send,
   Share2,
-  Shield,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
   User,
   Users,
-  Volume1,
-  Volume2,
-  VolumeX,
   X,
   Zap,
 } from "lucide-react";
@@ -44,52 +31,28 @@ import mascotImg from "@/assets/tourist-mascot.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone } from "@/hooks/use-geolocation";
-import {
-  SUPPORTED_LANGUAGES,
-  type SpeakerRole,
-  type SpeechRecognitionLike,
-  type SpeechRecognitionEventLike,
-  type SpeechRecognitionErrorEventLike,
-  getLoadedVoices,
-  findMatchingVoice,
-} from "@/lib/translation.types";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
 });
 
-// Quick emergency phrase presets
-const QUICK_QUESTIONS_TOURIST = [
-  "I need medical assistance immediately.",
-  "I lost my passport and travel bag.",
-  "Where is the nearest police station?",
-  "Can you help me contact my embassy?",
-];
-
-const QUICK_RESPONSES_OFFICER = [
-  "Please stay calm, you are safe here.",
-  "Show me your Digital ID or passport.",
-  "Can you describe what happened?",
-  "An emergency response unit is on the way.",
-];
-
 // Safety tips presets for modal
 const SAFETY_TIPS = [
   {
     title: "Official Tourist Helpline",
-    desc: "Dial 1363 (24x7 Multi-lingual toll-free Tourist Helpline) or 112 for all emergencies.",
+    desc: "Dial 1363 (24x7 Multi-lingual toll-free Tourist Helpline) or 112 for all police and medical emergencies in Tamil Nadu.",
   },
   {
     title: "Verified Transport",
-    desc: "Always use prepaid airport/railway taxi counters or registered ride-hailing apps.",
+    desc: "Always use prepaid airport/railway taxi counters or registered ride-hailing apps for safe and monitored commutes.",
   },
   {
     title: "Digital ID Verification",
-    desc: "Keep your QR Digital ID readily accessible on BEACON for swift verification at checkpoints.",
+    desc: "Keep your QR Digital ID readily accessible on BEACON for swift verification at tourist checkpoints and monuments.",
   },
   {
     title: "Geofence Notifications",
-    desc: "Stay alert if you receive a notification when entering caution or restricted zones after dusk.",
+    desc: "Stay alert if you receive an automated notification when entering caution or restricted zones after dusk.",
   },
 ];
 
@@ -97,7 +60,6 @@ function TouristHome() {
   const { user, profile } = useAuth();
   const { effective, coords, error: geoError, requestLocation } = useGeolocation();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   // Local state
   const [sendingSos, setSendingSos] = useState(false);
@@ -105,20 +67,6 @@ function TouristHome() {
   const [safetyTipsOpen, setSafetyTipsOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [weatherData, setWeatherData] = useState<{ temp: number; text: string } | null>(null);
-
-  // Translation interaction states
-  const [touristInput, setTouristInput] = useState("");
-  const [officerInput, setOfficerInput] = useState("");
-  const [touristTranslated, setTouristTranslated] = useState("");
-  const [officerTranslated, setOfficerTranslated] = useState("");
-  const [touristLang, setTouristLang] = useState("en");
-  const [officerLang, setOfficerLang] = useState("ta");
-  const [activeMic, setActiveMic] = useState<SpeakerRole | null>(null);
-  const [isTranslating, setIsTranslating] = useState<SpeakerRole | null>(null);
-  const [isPlayingAudio, setIsPlayingAudio] = useState<string | null>(null);
-  const [installedVoices, setInstalledVoices] = useState<SpeechSynthesisVoice[]>([]);
-
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   // Load geofence zones from Supabase
   const { data: zones = [] } = useQuery({
@@ -153,20 +101,6 @@ function TouristHome() {
   );
 
   const risk = currentZone?.risk_level ?? "safe";
-  const safetyScore = Math.max(
-    35,
-    (profile?.safety_score ?? 85) - (risk === "restricted" ? 30 : risk === "caution" ? 12 : 0),
-  );
-
-  // Load voices for speech output
-  useEffect(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      void getLoadedVoices().then((v) => setInstalledVoices(v));
-      const onVoices = () => setInstalledVoices(window.speechSynthesis.getVoices());
-      window.speechSynthesis.addEventListener("voiceschanged", onVoices);
-      return () => window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
-    }
-  }, []);
 
   // Fetch real weather data from Open-Meteo
   useEffect(() => {
@@ -266,179 +200,7 @@ function TouristHome() {
     }
   };
 
-  // TTS Speech Player
-  const speakText = useCallback(
-    async (text: string, langCode: string, id: string) => {
-      if (typeof window === "undefined" || !("speechSynthesis" in window) || !text.trim()) return;
-
-      const voices = installedVoices.length > 0 ? installedVoices : await getLoadedVoices();
-      const voice = findMatchingVoice(voices, langCode);
-
-      if (!voice) {
-        toast.info(`Text only: Voice package for this language is not installed on this device.`);
-        return;
-      }
-
-      try {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text.trim());
-        utterance.voice = voice;
-        utterance.lang = voice.lang;
-        utterance.rate = 0.95;
-
-        setIsPlayingAudio(id);
-        utterance.onend = () => setIsPlayingAudio(null);
-        utterance.onerror = () => setIsPlayingAudio(null);
-
-        window.speechSynthesis.speak(utterance);
-      } catch {
-        setIsPlayingAudio(null);
-      }
-    },
-    [installedVoices],
-  );
-
-  // Translation executor
-  const executeTranslate = useCallback(
-    async (text: string, speaker: SpeakerRole) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-
-      setIsTranslating(speaker);
-      const sourceLang = speaker === "tourist" ? touristLang : officerLang;
-      const targetLang = speaker === "tourist" ? officerLang : touristLang;
-      let translated = "";
-
-      try {
-        // 1. Try Supabase Edge Function
-        try {
-          const { data, error: e } = await supabase.functions.invoke("translate-text", {
-            body: {
-              text: trimmed,
-              source_lang: sourceLang,
-              target_lang: targetLang,
-            },
-          });
-          if (!e && (data as { translated_text?: string })?.translated_text) {
-            translated = (data as { translated_text: string }).translated_text;
-          }
-        } catch {
-          // Fallback
-        }
-
-        // 2. Direct free translation fallback
-        if (!translated) {
-          const src = sourceLang.toLowerCase().split("-")[0];
-          const tgt = targetLang.toLowerCase().split("-")[0];
-          if (src === tgt) {
-            translated = trimmed;
-          } else {
-            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${src}|${tgt}`;
-            const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
-            if (res.ok) {
-              const json = await res.json();
-              if (json?.responseData?.translatedText) {
-                translated = json.responseData.translatedText
-                  .replace(/&amp;/g, "&")
-                  .replace(/&lt;/g, "<")
-                  .replace(/&gt;/g, ">")
-                  .replace(/&#39;/g, "'")
-                  .replace(/&quot;/g, '"');
-              }
-            }
-          }
-        }
-
-        if (!translated) translated = trimmed;
-
-        if (speaker === "tourist") {
-          setOfficerTranslated(translated);
-          void speakText(translated, officerLang, "officer-output");
-        } else {
-          setTouristTranslated(translated);
-          void speakText(translated, touristLang, "tourist-output");
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Translation error";
-        toast.error(`Translation notice: ${msg}`);
-      } finally {
-        setIsTranslating(null);
-      }
-    },
-    [touristLang, officerLang, speakText],
-  );
-
-  // Speech-to-text handler
-  const toggleSpeechInput = (speaker: SpeakerRole) => {
-    if (typeof window === "undefined") return;
-
-    if (activeMic === speaker) {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch {
-          // Ignore
-        }
-      }
-      setActiveMic(null);
-      return;
-    }
-
-    const SpeechRec =
-      (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition;
-
-    if (!SpeechRec) {
-      toast.info("Voice input is not supported in this browser. Please type your message.");
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRec();
-      const code = speaker === "tourist" ? touristLang : officerLang;
-      const langCfg = SUPPORTED_LANGUAGES.find((l) => l.code === code);
-      recognition.lang = langCfg?.speechCode || "en-US";
-      recognition.continuous = false;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => setActiveMic(speaker);
-
-      let finalCaptured = "";
-      recognition.onresult = (event: SpeechRecognitionEventLike) => {
-        let live = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const item = event.results[i];
-          if (item && item[0]) {
-            if (item.isFinal) finalCaptured += item[0].transcript;
-            else live += item[0].transcript;
-          }
-        }
-        const display = finalCaptured || live;
-        if (speaker === "tourist") setTouristInput(display);
-        else setOfficerInput(display);
-      };
-
-      recognition.onerror = () => {
-        setActiveMic(null);
-      };
-
-      recognition.onend = () => {
-        setActiveMic(null);
-        recognitionRef.current = null;
-        const textToTranslate = finalCaptured.trim() || (speaker === "tourist" ? touristInput : officerInput).trim();
-        if (textToTranslate) {
-          void executeTranslate(textToTranslate, speaker);
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch {
-      setActiveMic(null);
-      toast.error("Could not access microphone.");
-    }
-  };
-
+  // Personalized dynamic name extracted from authenticated profile
   const firstName = profile?.full_name?.trim()
     ? profile.full_name.trim().split(" ")[0]
     : "Traveler";
@@ -446,7 +208,7 @@ function TouristHome() {
   return (
     <div className="space-y-6 pb-28 lg:pb-12 text-[#1E1E1E]">
       {/* ========================================================================= */}
-      {/* 1. TOP NAVIGATION — FLOATING CORAL/PEACH GLASS PILL BAR */}
+      {/* 1. TOP NAVIGATION — FLOATING CORAL/PEACH PILL BAR */}
       {/* ========================================================================= */}
       <nav className="relative z-30 flex items-center justify-between rounded-[28px] border border-[#F6B28F]/40 bg-white/85 px-4 sm:px-6 py-3 shadow-[0_8px_30px_rgba(255,111,97,0.08)] backdrop-blur-md transition-all">
         {/* Left Brand with BEACON Logo & Tagline */}
@@ -538,15 +300,15 @@ function TouristHome() {
       </nav>
 
       {/* ========================================================================= */}
-      {/* 2. HERO SECTION — FUTURISTIC 3D SAFETY VISUALIZATION & LIVE LOCATION */}
+      {/* 2. HERO SECTION — 3D TOURIST + CLEAN ROTATING EARTH ATMOSPHERE */}
       {/* ========================================================================= */}
       <div className="relative overflow-hidden rounded-[36px] border border-[#F6B28F]/30 bg-gradient-to-br from-white via-[#FFF8F3] to-[#FFF1EA] p-6 sm:p-8 lg:p-10 shadow-[0_16px_45px_rgba(255,111,97,0.08)]">
-        {/* Soft Background Atmospheric Glow */}
+        {/* Soft Background Atmospheric Glow (No wireframe lines) */}
         <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-gradient-to-br from-[#FF6F61]/15 to-[#F6B28F]/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-gradient-to-tr from-[#F6B28F]/15 to-[#FF6F61]/10 blur-3xl" />
 
         <div className="relative grid grid-cols-1 lg:grid-cols-12 items-center gap-8 lg:gap-6">
-          {/* Left Column: Greeting + Dynamic Status & Current Location Card (5 Cols) */}
+          {/* Left Column: Personalized Greeting + Dynamic Status & Current Location (5 Cols) */}
           <div className="lg:col-span-5 space-y-5 text-left">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-[#FF6F61]/10 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-[#FF6F61] border border-[#FF6F61]/20">
@@ -608,76 +370,60 @@ function TouristHome() {
                     {currentZone?.name ?? "Marina Beach, Chennai, Tamil Nadu"}
                   </p>
                   <p className="mt-0.5 text-xs text-[#77716D] truncate">
-                    {geoError ? "GPS tracking active (simulated location)" : "Location tracked live via GPS satellite"}
+                    {geoError
+                      ? "GPS tracking active (simulated location)"
+                      : "Location tracked live via GPS satellite"}
                   </p>
                 </div>
               </div>
 
-              {/* Location fallback button if not granted */}
+              {/* Location fallback button if permission not granted */}
               {geoError && (
                 <button
                   onClick={requestLocation}
                   className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-xl bg-[#FF6F61]/10 py-1.5 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-colors cursor-pointer"
                 >
                   <Radio className="h-3.5 w-3.5 animate-pulse" />
-                  <span>Enable Accurate GPS</span>
+                  <span>Enable Location</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Center 3D Mascot Character with Slow Rotating Globe Background (4 Cols) */}
+          {/* Center 3D Mascot Character on 3D Earth Globe (4 Cols) */}
           <div className="lg:col-span-4 relative flex flex-col items-center justify-center py-4 select-none">
-            {/* Animated Rotating Earth & Atmospheric Aura */}
+            {/* Soft Ambient Atmosphere behind Globe (No wireframe lines) */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              {/* Rotating Wireframe SVG Globe */}
-              <motion.svg
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 45, ease: "linear" }}
-                className="h-64 w-64 sm:h-72 sm:w-72 text-[#F6B28F]/25 drop-shadow-sm"
-                viewBox="0 0 100 100"
-                fill="none"
-              >
-                <circle cx="50" cy="50" r="46" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
-                <ellipse cx="50" cy="50" rx="46" ry="20" stroke="currentColor" strokeWidth="0.8" />
-                <ellipse cx="50" cy="50" rx="46" ry="34" stroke="currentColor" strokeWidth="0.8" />
-                <ellipse cx="50" cy="50" rx="20" ry="46" stroke="currentColor" strokeWidth="0.8" />
-                <ellipse cx="50" cy="50" rx="34" ry="46" stroke="currentColor" strokeWidth="0.8" />
-                <line x1="4" y1="50" x2="96" y2="50" stroke="currentColor" strokeWidth="1" />
-                <line x1="50" y1="4" x2="50" y2="96" stroke="currentColor" strokeWidth="1" />
-              </motion.svg>
-
-              {/* Glowing Atmosphere Radial Gradient */}
-              <div className="absolute h-56 w-56 rounded-full bg-gradient-to-br from-[#FF6F61]/10 via-[#F6B28F]/15 to-transparent blur-xl" />
+              <div className="h-56 w-56 sm:h-64 sm:w-64 rounded-full bg-gradient-to-br from-[#FF6F61]/10 via-[#F6B28F]/15 to-transparent blur-2xl" />
             </div>
 
             {/* Synchronized Soft Ground Shadow */}
             <motion.div
               animate={{
-                scale: [1, 0.85, 1],
-                opacity: [0.35, 0.18, 0.35],
+                scale: [1, 0.94, 1],
+                opacity: [0.28, 0.18, 0.28],
               }}
               transition={{
                 repeat: Infinity,
-                duration: 3.2,
+                duration: 6,
                 ease: "easeInOut",
               }}
               className="absolute bottom-2 left-1/2 -translate-x-1/2 h-5 w-32 rounded-full bg-[#FF6F61]/20 blur-md pointer-events-none"
             />
 
-            {/* 3D Mascot Character with Gentle Breathing & Hand Wave */}
+            {/* Stable, Natural 3D Tourist Character on 3D Earth Globe (No shaking/bouncing) */}
             <motion.img
               src={mascotImg}
-              alt="BEACON 3D Tourist Character"
+              alt="BEACON 3D Tourist on Earth Globe"
               animate={{
-                y: [0, -10, 0],
-                rotate: [0, 4.5, -3, 3.5, 0],
+                y: [0, -4, 0],
               }}
               transition={{
-                y: { repeat: Infinity, duration: 3.2, ease: "easeInOut" },
-                rotate: { repeat: Infinity, duration: 4, ease: "easeInOut" },
+                repeat: Infinity,
+                duration: 6,
+                ease: "easeInOut",
               }}
-              className="relative z-10 h-56 sm:h-64 lg:h-72 w-auto object-contain drop-shadow-xl"
+              className="relative z-10 h-60 sm:h-68 lg:h-76 w-auto object-contain drop-shadow-2xl"
             />
           </div>
 
@@ -703,13 +449,17 @@ function TouristHome() {
               {/* Live Coordinates */}
               <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[#FFF8F3] p-2.5 border border-[#F6B28F]/20 text-[11px]">
                 <div>
-                  <span className="text-[9px] font-black uppercase text-[#77716D] block">Latitude</span>
+                  <span className="text-[9px] font-black uppercase text-[#77716D] block">
+                    Latitude
+                  </span>
                   <span className="font-mono font-bold text-[#1E1E1E]">
                     {effective.lat ? effective.lat.toFixed(4) : "13.0827"}° N
                   </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-black uppercase text-[#77716D] block">Longitude</span>
+                  <span className="text-[9px] font-black uppercase text-[#77716D] block">
+                    Longitude
+                  </span>
                   <span className="font-mono font-bold text-[#1E1E1E]">
                     {effective.lng ? effective.lng.toFixed(4) : "80.2707"}° E
                   </span>
@@ -799,266 +549,23 @@ function TouristHome() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. BEACON AI TWO-WAY COMMUNICATION SECTION */}
-      {/* ========================================================================= */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div>
-            <h2 className="text-base sm:text-lg font-black text-[#1E1E1E] flex items-center gap-2">
-              <Languages className="h-5 w-5 text-[#FF6F61]" />
-              <span>BEACON AI Two-Way Communication</span>
-            </h2>
-            <p className="text-xs text-[#77716D]">Instant translation between Tourist and Responders</p>
-          </div>
-
-          <Link
-            to="/app/translate"
-            className="text-xs font-bold text-[#FF6F61] hover:underline flex items-center gap-1"
-          >
-            <span>Full Screen Translator</span>
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Left Panel: TALK TO BEACON (Tourist) */}
-          <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FF6F61]/15 text-[#FF6F61]">
-                  <User className="h-4 w-4" />
-                </span>
-                <div>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-[#FF6F61]">
-                    TALK TO BEACON
-                  </h3>
-                  <p className="text-[10px] text-[#77716D]">Ask anything in English</p>
-                </div>
-              </div>
-
-              {/* Tourist Language Selector */}
-              <select
-                value={touristLang}
-                onChange={(e) => setTouristLang(e.target.value)}
-                className="rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2 py-1 text-xs font-bold text-[#1E1E1E] focus:outline-none"
-              >
-                {SUPPORTED_LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.flag} {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Live Translated Output from Officer */}
-            <div className="min-h-[60px] rounded-2xl bg-[#39B86B]/10 p-3 text-xs border border-[#39B86B]/20 flex items-center justify-between">
-              <p className={touristTranslated ? "font-bold text-[#1E1E1E]" : "text-[#77716D] italic"}>
-                {isTranslating === "officer"
-                  ? "Translating officer response…"
-                  : touristTranslated || "Officer response will appear here in English…"}
-              </p>
-              {touristTranslated && (
-                <button
-                  onClick={() => void speakText(touristTranslated, touristLang, "tourist-replay")}
-                  className="shrink-0 ml-2 rounded-lg bg-white p-1.5 text-[#39B86B] shadow-2xs hover:bg-[#39B86B]/20 cursor-pointer"
-                  title="Play audio"
-                >
-                  <Volume2 className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Input Bar with Mic & Send */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Type or speak your message..."
-                value={touristInput}
-                onChange={(e) => setTouristInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && touristInput.trim()) {
-                    void executeTranslate(touristInput, "tourist");
-                  }
-                }}
-                className="h-10 flex-1 rounded-2xl bg-[#FFF8F3] px-3.5 text-xs text-[#1E1E1E] placeholder:text-[#77716D] border border-[#F6B28F]/30 focus:outline-none focus:ring-2 focus:ring-[#FF6F61]/40"
-              />
-              <button
-                onClick={() => toggleSpeechInput("tourist")}
-                className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-sm transition-all cursor-pointer ${
-                  activeMic === "tourist"
-                    ? "bg-[#E94B5F] text-white animate-pulse"
-                    : "bg-[#FFF8F3] text-[#FF6F61] border border-[#F6B28F]/40 hover:bg-[#FF6F61]/10"
-                }`}
-                title="Speak message"
-              >
-                {activeMic === "tourist" ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </button>
-              <button
-                onClick={() => {
-                  if (touristInput.trim()) void executeTranslate(touristInput, "tourist");
-                }}
-                disabled={!touristInput.trim() || isTranslating === "tourist"}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] text-white shadow-sm disabled:opacity-40 cursor-pointer hover:scale-105 active:scale-95 transition-all"
-                title="Send translation"
-              >
-                {isTranslating === "tourist" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-
-            {/* Quick Tourist Emergency Questions */}
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#77716D] block mb-1.5">
-                Quick Questions:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {QUICK_QUESTIONS_TOURIST.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => {
-                      setTouristInput(q);
-                      void executeTranslate(q, "tourist");
-                    }}
-                    className="rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2.5 py-1 text-[11px] font-semibold text-[#1E1E1E] hover:bg-white hover:border-[#FF6F61]/50 transition-all cursor-pointer text-left"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Right Panel: POLICE OFFICER (Official) */}
-          <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600">
-                  <Shield className="h-4 w-4" />
-                </span>
-                <div>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-700">
-                    POLICE OFFICER
-                  </h3>
-                  <p className="text-[10px] text-[#77716D]">Responds in Tamil (தமிழ்)</p>
-                </div>
-              </div>
-
-              {/* Officer Language Selector */}
-              <select
-                value={officerLang}
-                onChange={(e) => setOfficerLang(e.target.value)}
-                className="rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2 py-1 text-xs font-bold text-[#1E1E1E] focus:outline-none"
-              >
-                {SUPPORTED_LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.flag} {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Live Translated Output from Tourist */}
-            <div className="min-h-[60px] rounded-2xl bg-blue-500/10 p-3 text-xs border border-blue-500/20 flex items-center justify-between">
-              <p className={officerTranslated ? "font-bold text-[#1E1E1E]" : "text-[#77716D] italic"}>
-                {isTranslating === "tourist"
-                  ? "Translating tourist message…"
-                  : officerTranslated || "Tourist message will appear here in Tamil…"}
-              </p>
-              {officerTranslated && (
-                <button
-                  onClick={() => void speakText(officerTranslated, officerLang, "officer-replay")}
-                  className="shrink-0 ml-2 rounded-lg bg-white p-1.5 text-blue-600 shadow-2xs hover:bg-blue-500/20 cursor-pointer"
-                  title="Play audio"
-                >
-                  <Volume2 className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Input Bar with Mic & Send */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Type response in Tamil or English..."
-                value={officerInput}
-                onChange={(e) => setOfficerInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && officerInput.trim()) {
-                    void executeTranslate(officerInput, "officer");
-                  }
-                }}
-                className="h-10 flex-1 rounded-2xl bg-[#FFF8F3] px-3.5 text-xs text-[#1E1E1E] placeholder:text-[#77716D] border border-[#F6B28F]/30 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-              />
-              <button
-                onClick={() => toggleSpeechInput("officer")}
-                className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-sm transition-all cursor-pointer ${
-                  activeMic === "officer"
-                    ? "bg-[#E94B5F] text-white animate-pulse"
-                    : "bg-[#FFF8F3] text-blue-600 border border-[#F6B28F]/40 hover:bg-blue-500/10"
-                }`}
-                title="Speak response"
-              >
-                {activeMic === "officer" ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </button>
-              <button
-                onClick={() => {
-                  if (officerInput.trim()) void executeTranslate(officerInput, "officer");
-                }}
-                disabled={!officerInput.trim() || isTranslating === "officer"}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm disabled:opacity-40 cursor-pointer hover:scale-105 active:scale-95 transition-all"
-                title="Send response"
-              >
-                {isTranslating === "officer" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-
-            {/* Quick Officer Responses */}
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#77716D] block mb-1.5">
-                Quick Officer Responses:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {QUICK_RESPONSES_OFFICER.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => {
-                      setOfficerInput(r);
-                      void executeTranslate(r, "officer");
-                    }}
-                    className="rounded-xl border border-[#F6B28F]/30 bg-[#FFF8F3] px-2.5 py-1 text-[11px] font-semibold text-[#1E1E1E] hover:bg-white hover:border-blue-500/50 transition-all cursor-pointer text-left"
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 5. EMERGENCY ACTION BAR — 4 PREMIUM ACTION CARDS */}
+      {/* 4. FOUR HIGHLIGHTED FEATURE / ACTION CARDS (REPLACING TRANSLATION SECTION) */}
       {/* ========================================================================= */}
       <div>
-        <h2 className="text-base sm:text-lg font-black text-[#1E1E1E] mb-3 px-1">
-          Quick Safety Actions
-        </h2>
+        <div className="flex items-center justify-between px-1 mb-3">
+          <h2 className="text-base sm:text-lg font-black text-[#1E1E1E]">
+            BEACON Protection Capabilities
+          </h2>
+          <span className="text-xs font-semibold text-[#77716D]">Smart Response Hub</span>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Action 1: EMERGENCY SOS (Visually Dominant) */}
+          {/* Card 1: 🚨 EMERGENCY SOS (Visually Dominant) */}
           <button
             onClick={triggerSos}
             disabled={sendingSos}
-            className="group relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#E94B5F] via-[#FF6F61] to-[#E94B5F] bg-size-200 p-5 text-left text-white shadow-lg shadow-[#E94B5F]/25 hover:shadow-xl hover:scale-[1.02] active:scale-98 transition-all cursor-pointer disabled:opacity-70"
+            className="group relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#E94B5F] via-[#FF6F61] to-[#E94B5F] p-5 text-left text-white shadow-lg shadow-[#E94B5F]/25 hover:shadow-xl hover:scale-[1.02] active:scale-98 transition-all cursor-pointer disabled:opacity-70"
           >
-            {/* Glowing Pulse Ring */}
             <span className="absolute -top-6 -right-6 h-20 w-20 rounded-full bg-white/20 blur-lg group-hover:scale-150 transition-transform" />
 
             <div className="flex items-center justify-between">
@@ -1066,7 +573,7 @@ function TouristHome() {
                 <ShieldAlert className="h-6 w-6 animate-pulse" />
               </span>
               <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-black tracking-widest uppercase">
-                CRITICAL
+                EMERGENCY
               </span>
             </div>
 
@@ -1076,7 +583,7 @@ function TouristHome() {
             </div>
           </button>
 
-          {/* Action 2: SHARE LIVE LOCATION */}
+          {/* Card 2: 📍 SHARE LIVE LOCATION */}
           <button
             onClick={handleShareLocation}
             className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 text-left shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group"
@@ -1089,11 +596,11 @@ function TouristHome() {
             </div>
             <div className="mt-4">
               <h3 className="text-sm font-black text-[#1E1E1E]">SHARE LIVE LOCATION</h3>
-              <p className="mt-0.5 text-xs text-[#77716D]">Share with trusted contacts</p>
+              <p className="mt-0.5 text-xs text-[#77716D]">Share your live location</p>
             </div>
           </button>
 
-          {/* Action 3: SAFETY TIPS */}
+          {/* Card 3: 💡 SAFETY TIPS */}
           <button
             onClick={() => setSafetyTipsOpen(true)}
             className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 text-left shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group"
@@ -1106,11 +613,11 @@ function TouristHome() {
             </div>
             <div className="mt-4">
               <h3 className="text-sm font-black text-[#1E1E1E]">SAFETY TIPS</h3>
-              <p className="mt-0.5 text-xs text-[#77716D]">Do's & Don'ts for travelers</p>
+              <p className="mt-0.5 text-xs text-[#77716D]">Stay informed while travelling</p>
             </div>
           </button>
 
-          {/* Action 4: REPORT INCIDENT */}
+          {/* Card 4: 🚩 REPORT INCIDENT */}
           <Link
             to="/app/alerts"
             className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-5 text-left shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group block"
@@ -1123,14 +630,14 @@ function TouristHome() {
             </div>
             <div className="mt-4">
               <h3 className="text-sm font-black text-[#1E1E1E]">REPORT INCIDENT</h3>
-              <p className="mt-0.5 text-xs text-[#77716D]">Help us keep places safe</p>
+              <p className="mt-0.5 text-xs text-[#77716D]">Report a safety incident</p>
             </div>
           </Link>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 6. ALWAYS-VISIBLE PROMINENT FLOATING SOS BUTTON */}
+      {/* 5. ALWAYS-VISIBLE PROMINENT FLOATING SOS BUTTON */}
       {/* ========================================================================= */}
       <div className="fixed bottom-20 right-4 sm:bottom-8 sm:right-8 z-40 flex flex-col items-center select-none">
         <div className="relative flex items-center justify-center">
@@ -1169,7 +676,7 @@ function TouristHome() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 7. SAFETY TIPS MODAL DIALOG */}
+      {/* 6. SAFETY TIPS MODAL DIALOG */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {safetyTipsOpen && (

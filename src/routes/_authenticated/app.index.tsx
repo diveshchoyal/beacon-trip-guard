@@ -114,7 +114,7 @@ function TouristHome() {
   return (
     <div className="space-y-5 pb-24 lg:pb-12">
       {/* 1. HERO MASCOT CARD WITH LIVE THOUGHT BUBBLE & SPEECH BUBBLE */}
-      <GlassCard className="p-5 sm:p-6 overflow-hidden relative border-2 border-white/60 bg-white/40">
+      <GlassCard className="p-5 sm:p-6 overflow-visible relative border-2 border-white/60 bg-white/40">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Left Text / Greeting Column */}
           <div className="flex-1 space-y-3 text-center md:text-left">
@@ -150,110 +150,90 @@ function TouristHome() {
           </div>
 
           {/* Center/Right: Animated Mascot with Speech and Thought Bubbles */}
-          <div className="relative flex items-center justify-center shrink-0 pt-2 pb-1">
+          <div className="relative flex flex-col items-center justify-center shrink-0 pt-4 pb-2 px-4">
             {/* Thought Bubble with LIVE Safety Score */}
             <motion.div
-              animate={{ y: [0, -5, 0] }}
-              transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
-              className="absolute -top-3 right-0 sm:-right-4 z-20 flex flex-col items-center justify-center rounded-3xl bg-white/95 px-3.5 py-2 shadow-lg border-2 border-white/90 backdrop-blur-md"
+              animate={{ y: [0, -8, 0], scale: [1, 1.03, 1] }}
+              transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut", delay: 0.2 }}
+              className="absolute -top-4 right-2 sm:right-4 z-20 flex flex-col items-center justify-center rounded-3xl bg-white/95 px-3.5 py-2 shadow-xl border-2 border-white/90 backdrop-blur-md"
             >
               <div className="text-center">
-                <p className={`text-xl sm:text-2xl font-black leading-none ${toneClass}`}>
+                <p className={`text-2xl sm:text-3xl font-black leading-none ${toneClass}`}>
                   {score}
                 </p>
-                <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5">
+                <p className="text-[8px] font-extrabold uppercase tracking-widest text-muted-foreground mt-0.5">
                   Live Score
                 </p>
               </div>
-              {/* Thought bubble little trailing dots */}
-              <span className="absolute -bottom-1.5 -left-1 h-2.5 w-2.5 rounded-full bg-white/95 border border-white/80 shadow-xs" />
-              <span className="absolute -bottom-3 -left-2.5 h-1.5 w-1.5 rounded-full bg-white/90 border border-white/70 shadow-xs" />
+              {/* Trailing cloud dots */}
+              <span className="absolute -bottom-2 -left-1.5 h-3 w-3 rounded-full bg-white/95 border border-white/80 shadow-xs" />
+              <span className="absolute -bottom-4 -left-3.5 h-1.5 w-1.5 rounded-full bg-white/90 border border-white/70 shadow-xs" />
             </motion.div>
 
-            {/* Speech Bubble with Friendly Time Greeting */}
+            {/* Speech Bubble with Friendly Greeting */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1, y: [0, -3, 0] }}
+              animate={{ opacity: 1, scale: 1, y: [0, -6, 0] }}
               transition={{
-                y: { repeat: Infinity, duration: 4, ease: "easeInOut", delay: 0.3 },
+                y: { repeat: Infinity, duration: 3.2, ease: "easeInOut", delay: 0.4 },
                 opacity: { duration: 0.3 },
               }}
-              className="absolute -top-2 left-0 sm:-left-6 z-20 rounded-2xl bg-white/95 px-3 py-1.5 text-xs font-bold text-foreground shadow-md border border-white/90 backdrop-blur-md flex items-center gap-1"
+              className="absolute -top-3 left-2 sm:-left-4 z-20 rounded-2xl bg-white/95 px-3.5 py-1.5 text-xs sm:text-sm font-bold text-foreground shadow-xl border border-white/90 backdrop-blur-md flex items-center gap-1.5 whitespace-nowrap"
             >
               <span>{greeting}</span>
-              {/* Speech bubble tail pointer */}
-              <span className="absolute -bottom-1 left-4 h-2 w-2 rotate-45 bg-white/95 border-r border-b border-white/80" />
+              {/* Pointer tail */}
+              <span className="absolute -bottom-1.5 left-5 h-3 w-3 rotate-45 bg-white/95 border-r border-b border-white/80" />
             </motion.div>
 
-            {/* Mascot Character Image with Gentle Idle Breathing & Arm Waving Animation */}
+            {/* Dynamic Ground Shadow underneath character, pulsing with bounce */}
+            <motion.div
+              animate={{
+                scale: [1, 0.82, 1],
+                opacity: [0.35, 0.18, 0.35],
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 3,
+                ease: "easeInOut",
+              }}
+              className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-5 w-28 rounded-full bg-black/25 blur-md pointer-events-none"
+            />
+
+            {/* Mascot Character with Animated Idle Bounce & Hand Waving */}
             <motion.img
               src={mascotImg}
               alt="BEACON Tourist Mascot"
               animate={{
-                y: [0, -6, 0],
-                rotate: [0, 1.8, -1.8, 0],
+                y: [0, -12, 0],
+                rotate: [0, 2.5, -2, 1, 0],
               }}
               transition={{
-                y: { repeat: Infinity, duration: 3.6, ease: "easeInOut" },
-                rotate: { repeat: Infinity, duration: 5.5, ease: "easeInOut" },
+                y: { repeat: Infinity, duration: 3, ease: "easeInOut" },
+                rotate: { repeat: Infinity, duration: 4.5, ease: "easeInOut" },
               }}
-              className="h-44 sm:h-52 w-auto object-contain drop-shadow-md select-none pointer-events-none"
+              className="h-52 sm:h-64 w-auto object-contain select-none pointer-events-none drop-shadow-xl"
             />
           </div>
         </div>
       </GlassCard>
 
-      {/* 2. LIVE SAFETY SCORE & CURRENT ZONE CARDS (GRID) */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Safety Score Card */}
-        <GlassCard transition={{ delay: 0.05, duration: 0.35 }}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Safety score
-          </p>
-          <div className="mt-3 flex items-center gap-4">
-            <div className="relative grid h-18 w-18 shrink-0 place-items-center rounded-2xl bg-secondary/40 border border-white/60 shadow-inner">
-              <div className="text-center">
-                <p className={`text-2xl font-black ${toneClass}`}>{score}</p>
-                <p className="text-[9px] uppercase tracking-wider text-muted-foreground">score</p>
-              </div>
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-foreground">
-                {risk === "restricted"
-                  ? "Restricted Zone"
-                  : risk === "caution"
-                    ? "Caution Zone"
-                    : "Optimal Safety"}
-              </h3>
-              <p className="mt-0.5 text-xs text-muted-foreground leading-normal">
-                {risk === "restricted"
-                  ? "Elevated caution required."
-                  : risk === "caution"
-                    ? "Moderate risk area — keep alert."
-                    : "Monitored tourist zone. Safe travels."}
-              </p>
-            </div>
+      {/* 2. CURRENT GEOFENCE ZONE CARD */}
+      <GlassCard transition={{ delay: 0.08, duration: 0.35 }}>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Current Geofence Zone
+            </p>
+            <p className="mt-1 truncate text-base font-bold text-foreground">
+              {currentZone?.name ?? "Open area — no active geofence"}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground truncate">
+              {error ?? currentZone?.description ?? "Location actively monitored live via GPS."}
+            </p>
           </div>
-        </GlassCard>
-
-        {/* Current Zone Card */}
-        <GlassCard transition={{ delay: 0.1, duration: 0.35 }}>
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Current zone
-              </p>
-              <p className="mt-1 truncate text-sm sm:text-base font-bold text-foreground">
-                {currentZone?.name ?? "Open area — no active geofence"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground truncate">
-                {error ?? currentZone?.description ?? "Location tracked live via GPS."}
-              </p>
-            </div>
-            <RiskBadge level={risk} />
-          </div>
-        </GlassCard>
-      </div>
+          <RiskBadge level={risk} />
+        </div>
+      </GlassCard>
 
       {/* 3. QUICK ACCESS FEATURE NAVIGATION CARDS */}
       <div>

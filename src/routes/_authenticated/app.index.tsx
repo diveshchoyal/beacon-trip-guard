@@ -33,63 +33,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";
 import { useCrowdX } from "@/hooks/use-crowdx";
+import {
+  COMPREHENSIVE_POLICE_STATIONS,
+  type PoliceStationRecord,
+} from "@/lib/police-stations";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
 });
-
-export interface PoliceStationRecord {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  division?: string;
-}
-
-// Comprehensive verified police station dataset across Tamil Nadu / Chennai covering all zones
-const COMPREHENSIVE_POLICE_STATIONS: PoliceStationRecord[] = [
-  // North Chennai (Zone 1 - 5)
-  { id: "ps_tondiarpet", name: "H1 Tondiarpet Police Station", lat: 13.1284, lng: 80.2882, division: "North Chennai" },
-  { id: "ps_kasimedu", name: "N2 Kasimedu Police Station", lat: 13.1250, lng: 80.2970, division: "North Chennai" },
-  { id: "ps_washermanpet", name: "H3 Washermanpet Police Station", lat: 13.1118, lng: 80.2812, division: "North Chennai" },
-  { id: "ps_royapuram", name: "N1 Royapuram Police Station", lat: 13.1098, lng: 80.2945, division: "North Chennai" },
-  { id: "ps_korukkupet", name: "H4 Korukkupet Police Station", lat: 13.1200, lng: 80.2750, division: "North Chennai" },
-  { id: "ps_harbour", name: "B1 North Beach / Harbour Police Station", lat: 13.0945, lng: 80.2920, division: "North Chennai" },
-  { id: "ps_flowerbazaar", name: "B2 Flower Bazaar Police Station", lat: 13.0910, lng: 80.2840, division: "North Chennai" },
-  { id: "ps_tiruvottiyur", name: "M1 Tiruvottiyur Police Station", lat: 13.1610, lng: 80.3010, division: "North Chennai" },
-  { id: "ps_madhavaram", name: "M2 Madhavaram Police Station", lat: 13.1480, lng: 80.2310, division: "North Chennai" },
-  { id: "ps_sembium", name: "K1 Sembium Police Station", lat: 13.1140, lng: 80.2390, division: "North Chennai" },
-  { id: "ps_vyasarpadi", name: "M4 Vyasarpadi Police Station", lat: 13.1040, lng: 80.2610, division: "North Chennai" },
-
-  // Central Chennai
-  { id: "ps_vepery", name: "G1 Vepery Police Station", lat: 13.0850, lng: 80.2670, division: "Central Chennai" },
-  { id: "ps_central", name: "Chennai Central Railway Police Station", lat: 13.0827, lng: 80.2755, division: "Central Chennai" },
-  { id: "ps_chintadripet", name: "F1 Chintadripet Police Station", lat: 13.0760, lng: 80.2730, division: "Central Chennai" },
-  { id: "ps_egmore", name: "F2 Egmore Police Station", lat: 13.0780, lng: 80.2600, division: "Central Chennai" },
-  { id: "ps_triplicane", name: "D1 Triplicane Police Station", lat: 13.0592, lng: 80.2741, division: "Central Chennai" },
-  { id: "ps_marina", name: "D5 Marina Beach Police Station", lat: 13.0512, lng: 80.2818, division: "Central Chennai" },
-  { id: "ps_royapettah", name: "E2 Royapettah Police Station", lat: 13.0566, lng: 80.2612, division: "Central Chennai" },
-  { id: "ps_mylapore", name: "E1 Mylapore Police Station", lat: 13.0337, lng: 80.2678, division: "Central Chennai" },
-  { id: "ps_kilpauk", name: "G3 Kilpauk Police Station", lat: 13.0790, lng: 80.2430, division: "Central Chennai" },
-  { id: "ps_annanagar", name: "K4 Anna Nagar Police Station", lat: 13.0850, lng: 80.2180, division: "Central Chennai" },
-  { id: "ps_chetpet", name: "G2 Chetpet Police Station", lat: 13.0710, lng: 80.2410, division: "Central Chennai" },
-  { id: "ps_nungambakkam", name: "F3 Nungambakkam Police Station", lat: 13.0580, lng: 80.2430, division: "Central Chennai" },
-
-  // South & West Chennai
-  { id: "ps_mambalam", name: "R1 Mambalam (T. Nagar) Police Station", lat: 13.0418, lng: 80.2337, division: "South Chennai" },
-  { id: "ps_saidapet", name: "J1 Saidapet Police Station", lat: 13.0210, lng: 80.2230, division: "South Chennai" },
-  { id: "ps_guindy", name: "J3 Guindy Police Station", lat: 13.0067, lng: 80.2120, division: "South Chennai" },
-  { id: "ps_besantnagar", name: "J5 Shastri Nagar / Besant Nagar Police Station", lat: 12.9980, lng: 80.2660, division: "South Chennai" },
-  { id: "ps_adyar", name: "J2 Adyar Police Station", lat: 13.0060, lng: 80.2570, division: "South Chennai" },
-  { id: "ps_velachery", name: "J7 Velachery Police Station", lat: 12.9810, lng: 80.2210, division: "South Chennai" },
-  { id: "ps_thiruvanmiyur", name: "J6 Thiruvanmiyur Police Station", lat: 12.9860, lng: 80.2610, division: "South Chennai" },
-  { id: "ps_koyambedu", name: "K10 Koyambedu Police Station", lat: 13.0690, lng: 80.1940, division: "West Chennai" },
-  { id: "ps_vadapalani", name: "R8 Vadapalani Police Station", lat: 13.0510, lng: 80.2120, division: "West Chennai" },
-  { id: "ps_ashoknagar", name: "R3 Ashok Nagar Police Station", lat: 13.0360, lng: 80.2130, division: "West Chennai" },
-  { id: "ps_tambaram", name: "Tambaram Police Station", lat: 12.9240, lng: 80.1170, division: "Tambaram Commissionerate" },
-  { id: "ps_chromepet", name: "Chromepet Police Station", lat: 12.9510, lng: 80.1410, division: "Tambaram Commissionerate" },
-  { id: "ps_pallavaram", name: "Pallavaram Police Station", lat: 12.9680, lng: 80.1500, division: "Tambaram Commissionerate" },
-];
 
 // Safety tips presets for modal
 const SAFETY_TIPS = [

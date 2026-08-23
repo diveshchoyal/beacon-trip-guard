@@ -31,6 +31,7 @@ import mascotImg from "@/assets/tourist-mascot.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone } from "@/hooks/use-geolocation";
+import { useCrowdX } from "@/hooks/use-crowdx";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
@@ -67,6 +68,22 @@ function TouristHome() {
   const [safetyTipsOpen, setSafetyTipsOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [weatherData, setWeatherData] = useState<{ temp: number; text: string } | null>(null);
+
+  // Real CrowdX (Chennai Crowd Watch) YOLO integration hook
+  const {
+    level: crowdLevel,
+    colorClass: crowdColorClass,
+    detectedCount: crowdDetectedCount,
+    densityPercentage: crowdDensityPercentage,
+    matchedLocation: crowdMatchedLocation,
+    isLive: isCrowdLive,
+    freshnessText: crowdFreshnessText,
+    connectionState: crowdConnectionState,
+  } = useCrowdX({
+    userLat: effective.lat,
+    userLng: effective.lng,
+    hasLocationPermission: !geoError,
+  });
 
   // Load geofence zones from Supabase
   const { data: zones = [] } = useQuery({
@@ -411,7 +428,7 @@ function TouristHome() {
               className="absolute bottom-2 left-1/2 -translate-x-1/2 h-5 w-32 rounded-full bg-[#FF6F61]/20 blur-md pointer-events-none"
             />
 
-            {/* Stable, Natural 3D Tourist Character on 3D Earth Globe (No shaking/bouncing) */}
+            {/* Stable, Natural 3D Tourist Character on 3D Earth Globe */}
             <motion.img
               src={mascotImg}
               alt="BEACON 3D Tourist on Earth Globe"
@@ -501,18 +518,64 @@ function TouristHome() {
           </p>
         </div>
 
-        {/* Card 2: CROWD DENSITY */}
+        {/* Card 2: CROWD DENSITY (Real CrowdX YOLO Integration) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
-              CROWD DENSITY
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
+                CROWD DENSITY
+              </span>
+              {isCrowdLive && (
+                <span className="flex items-center gap-1 text-[9px] font-black text-[#39B86B] uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#39B86B] animate-ping" />
+                  LIVE
+                </span>
+              )}
+            </div>
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FF6F61]/15 text-[#FF6F61]">
               <Users className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">Moderate</p>
-          <p className="mt-0.5 text-xs text-[#77716D] font-bold">24% occupied · Normal</p>
+
+          {/* Dynamic Status / Count */}
+          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
+            {crowdDetectedCount !== null ? (
+              <>
+                <span>{crowdLevel}</span>
+                {crowdDensityPercentage !== null && (
+                  <span className="ml-1.5 text-xs font-bold text-[#77716D]">
+                    ({crowdDensityPercentage}%)
+                  </span>
+                )}
+              </>
+            ) : crowdConnectionState === "denied" ? (
+              <span className="text-sm font-bold text-[#77716D]">Location Denied</span>
+            ) : crowdConnectionState === "unavailable" ? (
+              <span className="text-sm font-bold text-[#77716D]">Unavailable</span>
+            ) : (
+              <span className="text-sm font-bold text-[#77716D]">Connecting...</span>
+            )}
+          </p>
+
+          {/* SubLabel / Freshness */}
+          <div className="mt-1 space-y-0.5">
+            <p className={`text-xs font-bold ${crowdColorClass}`}>
+              {crowdDetectedCount !== null
+                ? `${crowdDetectedCount} people detected`
+                : crowdConnectionState === "denied"
+                  ? "Enable location to see nearby crowd conditions"
+                  : crowdConnectionState === "unavailable"
+                    ? "Crowd monitoring unavailable at this location"
+                    : "Connecting to YOLO stream..."}
+            </p>
+
+            <div className="flex items-center justify-between text-[10px] text-[#77716D]">
+              <span className="truncate max-w-[110px] sm:max-w-none">
+                {crowdMatchedLocation ? crowdMatchedLocation.name : "Chennai Area"}
+              </span>
+              <span className="shrink-0 font-medium">{crowdFreshnessText}</span>
+            </div>
+          </div>
         </div>
 
         {/* Card 3: NEARBY POLICE */}
@@ -549,7 +612,7 @@ function TouristHome() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. FOUR HIGHLIGHTED FEATURE / ACTION CARDS (REPLACING TRANSLATION SECTION) */}
+      {/* 4. FOUR HIGHLIGHTED FEATURE / ACTION CARDS */}
       {/* ========================================================================= */}
       <div>
         <div className="flex items-center justify-between px-1 mb-3">

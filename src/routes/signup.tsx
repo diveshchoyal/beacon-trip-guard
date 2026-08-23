@@ -13,12 +13,12 @@ export const Route = createFileRoute("/signup")({
       { title: "Create account — BEACON" },
       {
         name: "description",
-        content: "Create a BEACON account as a tourist or as a police / admin responder.",
+        content: "Create your BEACON tourist account and travel with live safety monitoring.",
       },
       { property: "og:title", content: "Create account — BEACON" },
       {
         property: "og:description",
-        content: "Create a BEACON account as a tourist or as a police / admin responder.",
+        content: "Create your BEACON tourist account and travel with live safety monitoring.",
       },
     ],
   }),

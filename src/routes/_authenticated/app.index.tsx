@@ -9,9 +9,6 @@ import {
   ShieldAlert,
   Languages,
   AlertTriangle,
-  Navigation,
-  ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,70 +16,62 @@ import mascotImg from "@/assets/tourist-mascot.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone } from "@/hooks/use-geolocation";
-import { GlassCard, RiskBadge } from "@/components/ui/glass";
+import { GlassCard } from "@/components/ui/glass";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
 });
 
-function getGreeting(fullName?: string | null) {
-  const hour = new Date().getHours();
-  const firstName = fullName?.trim() ? fullName.trim().split(" ")[0] : "Explorer";
-  if (hour >= 5 && hour < 12) {
-    return `Good morning, ${firstName}!`;
-  } else if (hour >= 12 && hour < 17) {
-    return `Good afternoon, ${firstName}!`;
-  } else if (hour >= 17 && hour < 21) {
-    return `Good evening, ${firstName}!`;
-  } else {
-    return `Stay safe tonight, ${firstName}!`;
-  }
-}
-
-// Interactive SVG Circular Score Gauge
-function CircularScoreGauge({ score, risk }: { score: number; risk: string }) {
-  const radius = 38;
-  const strokeWidth = 7;
+// Copper / Metallic Circular Ring Gauge Component matching reference design
+function CopperRingScoreGauge({ score, risk }: { score: number; risk: string }) {
+  const radius = 34;
+  const strokeWidth = 8;
   const circumference = 2 * Math.PI * radius;
   const progressOffset = circumference - (score / 100) * circumference;
 
-  const strokeColor =
+  // Center score number color matching reference green tone
+  const scoreNumColor =
     risk === "restricted"
-      ? "#ef4444"
+      ? "text-rose-700"
       : risk === "caution"
-        ? "#f59e0b"
-        : "#10b981";
-
-  const textColor =
-    risk === "restricted"
-      ? "text-rose-600"
-      : risk === "caution"
-        ? "text-amber-600"
-        : "text-emerald-700";
+        ? "text-amber-700"
+        : "text-[#3d7057]";
 
   return (
-    <div className="relative flex flex-col items-center justify-center">
+    <div className="relative flex flex-col items-center justify-center select-none shrink-0">
       <div className="relative h-24 w-24 sm:h-28 sm:w-28 flex items-center justify-center">
+        {/* Soft Inset Clay Circle Backdrop */}
+        <div className="absolute inset-1.5 rounded-full bg-[#f2eae0] shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]" />
+
         <svg
-          className="h-full w-full -rotate-90 transform drop-shadow-sm"
-          viewBox="0 0 96 96"
+          className="h-full w-full -rotate-90 transform drop-shadow-xs relative z-10"
+          viewBox="0 0 88 88"
         >
-          {/* Background Track Ring */}
+          <defs>
+            {/* Metallic Copper / Terracotta Gradient for the Ring */}
+            <linearGradient id="copperRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#dca284" />
+              <stop offset="50%" stopColor="#b87253" />
+              <stop offset="100%" stopColor="#96563a" />
+            </linearGradient>
+          </defs>
+
+          {/* Background Groove */}
           <circle
-            cx="48"
-            cy="48"
+            cx="44"
+            cy="44"
             r={radius}
-            stroke="currentColor"
+            stroke="#e6d9cb"
             strokeWidth={strokeWidth}
             fill="transparent"
-            className="text-black/10"
           />
-          {/* Active Animated Score Progress Ring */}
+
+          {/* Active Metallic Copper Progress Ring */}
           <motion.circle
-            cx="48"
-            cy="48"
+            cx="44"
+            cy="44"
             r={radius}
-            stroke={strokeColor}
+            stroke="url(#copperRingGrad)"
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             fill="transparent"
@@ -93,12 +82,12 @@ function CircularScoreGauge({ score, risk }: { score: number; risk: string }) {
           />
         </svg>
 
-        {/* Center Score Number & Label */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
-          <span className={`text-2xl sm:text-3xl font-black leading-none ${textColor}`}>
+        {/* Center Score Number & SCORE Label */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-20">
+          <span className={`text-2xl sm:text-3xl font-black leading-none ${scoreNumColor}`}>
             {score}
           </span>
-          <span className="mt-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+          <span className="mt-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-[#8c7a6b]">
             SCORE
           </span>
         </div>
@@ -167,137 +156,166 @@ function TouristHome() {
     void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
   };
 
-  const greeting = getGreeting(profile?.full_name);
   const firstName = profile?.full_name?.trim()
     ? profile.full_name.trim().split(" ")[0]
-    : "Explorer";
+    : "Divesh";
 
   const statusSentence =
     risk === "restricted"
-      ? "You are inside a restricted zone. Stay alert and keep emergency contacts ready."
+      ? "You are inside a restricted zone. Stay alert and keep to marked paths."
       : risk === "caution"
-        ? "Moderate risk area with patchy network. Keep your digital ID handy and share live trip status."
-        : "You are in a well-monitored tourist safe zone in Tamil Nadu. Enjoy your travel.";
+        ? "Moderate risk area — patchy coverage. Share your plan with someone."
+        : "You are in a well-monitored area. Enjoy your trip.";
 
   return (
-    <div className="space-y-5 pb-24 lg:pb-12">
-      {/* 1. HERO CARD MATCHING THE REFERENCE COMPOSITION */}
-      <GlassCard className="p-5 sm:p-6 relative border-2 border-white/60 bg-white/45 shadow-lg overflow-hidden">
-        {/* Top Header Label */}
-        <div className="flex items-center justify-between gap-2 border-b border-black/5 pb-3">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border border-white/90 shadow-2xs backdrop-blur-md">
-            <Sparkles className="h-3.5 w-3.5 text-[var(--sand)]" />
-            <span>BEACON TRIP COMPANION</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground rounded-full bg-white/70 px-2.5 py-0.5 border border-white/80">
-              <ShieldCheck className="h-3.5 w-3.5 text-[var(--safe)]" />
-              <span>Protection Active</span>
-            </span>
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground rounded-full bg-white/70 px-2.5 py-0.5 border border-white/80">
-              <Navigation className="h-3 w-3 text-primary" />
-              <span>GPS Live</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Main Hero Body: Left Greeting & Status, Center Animated Mascot, Right Circular Gauge */}
-        <div className="pt-4 pb-2 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-6">
-          {/* Left Column: Heading & Live Status */}
-          <div className="space-y-2.5 text-left">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                HELLO, {firstName.toUpperCase()}
-              </p>
-              <h1 className="mt-0.5 text-2xl sm:text-3xl font-black tracking-tight text-foreground">
-                Safety score
-              </h1>
-            </div>
-
-            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-md">
+    <div className="space-y-6 pb-24 lg:pb-12">
+      {/* ========================================================================= */}
+      {/* 1. EXACT HERO CARD LAYOUT MATCHING REFERENCE DESIGN (CLAY AESTHETIC) */}
+      {/* ========================================================================= */}
+      <div className="relative rounded-[32px] border-[3px] border-[#ece4d8] bg-[#faf7f2]/95 p-5 sm:p-7 shadow-[inset_0_2px_4px_rgba(255,255,255,0.9),0_12px_28px_-6px_rgba(150,120,90,0.15)] transition-all">
+        {/* TOP SECTION: HELLO/STATUS (LEFT) + MASCOT & THOUGHT BUBBLE (CENTER) + COPPER RING GAUGE (RIGHT) */}
+        <div className="grid grid-cols-1 md:grid-cols-[1.1fr_auto_1.1fr] items-center gap-6 pb-6">
+          {/* Left Column: Hello tourist name + bold "Safety score" + live status sentence */}
+          <div className="space-y-1.5 text-left">
+            <p className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-[#8c7866]">
+              HELLO, {firstName.toUpperCase()}
+            </p>
+            <h2 className="text-xl sm:text-2xl font-black text-[#26201b] tracking-tight">
+              Safety score
+            </h2>
+            <p className="text-xs sm:text-sm text-[#736354] leading-relaxed max-w-xs pt-0.5">
               {statusSentence}
             </p>
           </div>
 
-          {/* Center Column: Animated Mascot with Breathing & Hand-Wave Animation */}
+          {/* Center Column: Animated Mascot with Noticeable Wave, "– HI" tag & Scalloped Thought Bubble */}
           <div className="relative flex flex-col items-center justify-center px-4 py-2 shrink-0">
-            {/* Dynamic Speech Bubble greeting near character */}
+            {/* Scalloped Cloud-Shaped Thought Bubble displaying LIVE score */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1, y: [0, -5, 0] }}
-              transition={{
-                y: { repeat: Infinity, duration: 3.2, ease: "easeInOut", delay: 0.3 },
-                opacity: { duration: 0.3 },
-              }}
-              className="absolute -top-3 left-0 sm:-left-3 z-20 rounded-2xl bg-white/95 px-3 py-1 text-[11px] sm:text-xs font-bold text-foreground shadow-md border border-white/90 backdrop-blur-md flex items-center gap-1 whitespace-nowrap"
+              animate={{ y: [0, -6, 0] }}
+              transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
+              className="absolute -top-7 right-0 sm:right-2 z-20 flex items-center justify-center select-none"
             >
-              <span>{greeting}</span>
-              {/* Pointer tail */}
-              <span className="absolute -bottom-1 left-4 h-2 w-2 rotate-45 bg-white/95 border-r border-b border-white/80" />
+              <div className="relative flex items-center justify-center rounded-[28px] bg-white/95 px-4 py-2 shadow-[0_4px_16px_rgba(170,130,100,0.22),inset_0_2px_4px_rgba(255,255,255,1)] border border-[#e8ded0]">
+                {/* Score Number in bold copper/brown */}
+                <span className="text-2xl sm:text-3xl font-black tracking-tight text-[#a06649]">
+                  {score}
+                </span>
+
+                {/* Cloud Bubble Scallop bumps */}
+                <span className="absolute -top-1.5 left-2 h-4 w-4 rounded-full bg-white/95 border-t border-l border-[#e8ded0]" />
+                <span className="absolute -top-2.5 right-3 h-5 w-5 rounded-full bg-white/95 border-t border-[#e8ded0]" />
+                <span className="absolute -bottom-1.5 right-2 h-4 w-4 rounded-full bg-white/95 border-b border-r border-[#e8ded0]" />
+
+                {/* Trailing dots connecting thought bubble to character's head */}
+                <span className="absolute -bottom-2 -left-1.5 h-3 w-3 rounded-full bg-white/95 border border-[#e8ded0] shadow-2xs" />
+                <span className="absolute -bottom-4 -left-3.5 h-1.5 w-1.5 rounded-full bg-white/90 border border-[#e8ded0] shadow-2xs" />
+              </div>
             </motion.div>
 
-            {/* Dynamic Ground Shadow pulsing in sync with bounce */}
+            {/* "– HI" text tag near the raised waving hand, pulsing with the wave */}
             <motion.div
               animate={{
-                scale: [1, 0.84, 1],
-                opacity: [0.35, 0.18, 0.35],
+                opacity: [0.65, 1, 0.65],
+                scale: [0.95, 1.06, 0.95],
               }}
               transition={{
                 repeat: Infinity,
                 duration: 3.2,
                 ease: "easeInOut",
               }}
-              className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-4 w-28 rounded-full bg-black/20 blur-md pointer-events-none"
+              className="absolute top-11 sm:top-12 right-0 sm:right-1 z-20 text-xs sm:text-sm font-black tracking-wider text-[#26201b] select-none pointer-events-none"
+            >
+              – HI
+            </motion.div>
+
+            {/* Soft Ground Shadow pulsing beneath the globe */}
+            <motion.div
+              animate={{
+                scale: [1, 0.85, 1],
+                opacity: [0.32, 0.16, 0.32],
+              }}
+              transition={{
+                repeat: Infinity,
+                duration: 3.2,
+                ease: "easeInOut",
+              }}
+              className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-4 w-28 rounded-full bg-[#7a6452]/25 blur-md pointer-events-none"
             />
 
-            {/* Mascot Character Illustration */}
+            {/* Mascot Character with Noticeable Hand Wave & Breathing Animation */}
             <motion.img
               src={mascotImg}
               alt="BEACON Tourist Mascot"
               animate={{
                 y: [0, -10, 0],
-                rotate: [0, 2, -1.8, 1, 0],
+                rotate: [0, 5.5, -3.5, 4, 0],
               }}
               transition={{
                 y: { repeat: Infinity, duration: 3.2, ease: "easeInOut" },
-                rotate: { repeat: Infinity, duration: 4.8, ease: "easeInOut" },
+                rotate: { repeat: Infinity, duration: 3.8, ease: "easeInOut" },
               }}
-              className="h-44 sm:h-52 w-auto object-contain select-none pointer-events-none drop-shadow-lg"
+              className="h-44 sm:h-52 w-auto object-contain select-none pointer-events-none drop-shadow-md"
             />
           </div>
 
-          {/* Right Column: Real Circular Progress Score Gauge */}
-          <div className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white/60 border border-white/80 shadow-2xs backdrop-blur-sm shrink-0">
-            <CircularScoreGauge score={score} risk={risk} />
-            <span className="mt-1 text-[10px] font-bold text-foreground uppercase tracking-wider">
-              {risk === "restricted"
-                ? "Restricted"
-                : risk === "caution"
-                  ? "Caution"
-                  : "Safe Area"}
-            </span>
+          {/* Right Column: Circular Copper Ring Gauge (with matching "Safety score" text on desktop) */}
+          <div className="flex flex-col items-center md:items-end justify-center">
+            <div className="flex items-center gap-4">
+              <div className="text-left hidden sm:block md:hidden lg:block">
+                <h3 className="text-base font-black text-[#26201b]">Safety score</h3>
+                <p className="text-xs text-[#736354] max-w-[155px] leading-snug">
+                  {statusSentence}
+                </p>
+              </div>
+              <CopperRingScoreGauge score={score} risk={risk} />
+            </div>
           </div>
         </div>
 
-        {/* Bottom Partition: CURRENT ZONE SHELF (Matching reference layout) */}
-        <div className="mt-4 pt-3.5 border-t border-black/5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+        {/* BOTTOM SECTION: DIVIDER LINE + CURRENT ZONE (LEFT) + RISK BADGE (RIGHT) */}
+        <div className="border-t-2 border-[#ede4d8] pt-4.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-[#8c7866]">
               CURRENT ZONE
             </p>
-            <p className="mt-0.5 truncate text-sm sm:text-base font-bold text-foreground">
+            <p className="mt-0.5 truncate text-base sm:text-lg font-black text-[#26201b]">
               {currentZone?.name ?? "Open area — no active geofence"}
             </p>
-            <p className="mt-0.5 text-xs text-muted-foreground truncate">
+            <p className="mt-0.5 text-xs text-[#736354] truncate">
               {error ?? currentZone?.description ?? "Location tracked live."}
             </p>
           </div>
-          <RiskBadge level={risk} />
-        </div>
-      </GlassCard>
 
+          {/* Pill-shaped live risk status badge ("SAFE" / "CAUTION" / "RESTRICTED") */}
+          <div className="shrink-0">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-black uppercase tracking-wider shadow-2xs border ${
+                risk === "restricted"
+                  ? "bg-rose-500/15 text-rose-700 border-rose-500/30"
+                  : risk === "caution"
+                    ? "bg-amber-500/15 text-amber-800 border-amber-500/30"
+                    : "bg-emerald-600/15 text-emerald-800 border-emerald-600/30"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  risk === "restricted"
+                    ? "bg-rose-600 animate-ping"
+                    : risk === "caution"
+                      ? "bg-amber-600"
+                      : "bg-emerald-600"
+                }`}
+              />
+              {risk === "restricted" ? "RESTRICTED" : risk === "caution" ? "CAUTION" : "SAFE"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
       {/* 2. QUICK ACCESS FEATURE NAVIGATION CARDS */}
+      {/* ========================================================================= */}
       <div>
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 px-1">
           Quick Services
@@ -381,7 +399,9 @@ function TouristHome() {
         </div>
       </div>
 
+      {/* ========================================================================= */}
       {/* 3. PROMINENT, ALWAYS-VISIBLE FLOATING ACTION SOS BUTTON */}
+      {/* ========================================================================= */}
       <div className="fixed bottom-20 right-4 sm:bottom-8 sm:right-8 z-40 flex flex-col items-center select-none">
         <div className="relative flex items-center justify-center">
           {/* Continuous Soft Pulsing Glow & Ping Animations */}

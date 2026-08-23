@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ShieldCheck, MapPin, Fingerprint } from "lucide-react";
 
 import logo from "@/assets/beacon-logo.png";
 import { GlassCard, PressButton } from "@/components/ui/glass";
@@ -25,12 +24,6 @@ export const Route = createFileRoute("/")({
   component: Landing,
 });
 
-const features = [
-  { icon: ShieldCheck, title: "AI safety score", copy: "Live risk read on every step of your trip." },
-  { icon: MapPin, title: "Geo-fencing", copy: "Know the moment you enter a high-risk zone." },
-  { icon: Fingerprint, title: "Digital ID", copy: "Tamper-evident identity, verifiable anywhere." },
-];
-
 function Landing() {
   return (
     <main className="relative min-h-screen overflow-hidden px-5 py-6">
@@ -38,30 +31,35 @@ function Landing() {
         <span className="text-sm font-semibold tracking-[0.35em] text-muted-foreground">BEACON</span>
       </div>
 
-      <div className="mx-auto mt-8 grid w-full max-w-5xl gap-6 lg:mt-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-        <GlassCard className="p-8 text-center lg:p-12 lg:text-left">
-          <motion.img
-            src={logo}
-            alt="BEACON logo — a lighthouse inside a shield"
-            width={1024}
-            height={1024}
-            className="animate-float mx-auto h-36 w-36 object-contain lg:mx-0 lg:h-44 lg:w-44"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-          />
-          <h1 className="mt-6 text-4xl font-bold tracking-tight text-foreground lg:text-5xl">
+      <div className="mx-auto mt-12 flex w-full max-w-3xl items-center justify-center lg:mt-24">
+        <GlassCard className="w-full p-8 text-center lg:p-12">
+          <div className="relative mx-auto h-44 w-44 lg:h-56 lg:w-56">
+            <div className="absolute inset-0 rounded-full bg-[var(--sand)]/20 blur-3xl" />
+            <div className="absolute inset-0 rounded-full bg-[var(--blush)]/20 blur-2xl" />
+            <motion.img
+              src={logo}
+              alt="BEACON logo — a lighthouse inside a shield"
+              width={1024}
+              height={1024}
+              className="animate-float relative z-10 h-full w-full object-contain drop-shadow-[0_12px_40px_rgba(201,165,116,0.55)]"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            />
+          </div>
+
+          <h1 className="mt-8 text-4xl font-bold tracking-tight text-foreground lg:text-6xl">
             BEACON
           </h1>
-          <p className="mt-3 text-base font-medium text-[var(--sand)]">
+          <p className="mt-3 text-lg font-medium text-[var(--sand)] lg:text-xl">
             Safe Travel. Smart Response.
           </p>
-          <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted-foreground lg:mx-0">
+          <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted-foreground lg:text-base">
             Smart tourist safety monitoring and incident response — AI risk scoring, geo-fencing and
             blockchain-based digital identity, in one calm place.
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center lg:justify-start">
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Link to="/login">
               <PressButton className="w-full sm:w-auto">Log In</PressButton>
             </Link>
@@ -72,22 +70,6 @@ function Landing() {
             </Link>
           </div>
         </GlassCard>
-
-        <div className="grid gap-4">
-          {features.map((f, i) => (
-            <GlassCard key={f.title} transition={{ delay: 0.1 * i, duration: 0.35 }}>
-              <div className="flex min-w-0 items-start gap-4">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-secondary/40 text-foreground">
-                  <f.icon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-foreground">{f.title}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{f.copy}</p>
-                </div>
-              </div>
-            </GlassCard>
-          ))}
-        </div>
       </div>
     </main>
   );

@@ -63,28 +63,34 @@ function SignupPage() {
 
   return (
     <main className="flex min-h-screen flex-col px-5 py-6">
-      <div className="mx-auto flex w-full max-w-md items-center justify-between">
+      <div className="mx-auto flex w-full max-w-sm items-center justify-between">
         <Link to="/" className="text-sm font-semibold tracking-[0.35em] text-muted-foreground">
           BEACON
         </Link>
       </div>
 
-      <div className="mx-auto flex w-full max-w-md flex-1 items-center py-8">
-        <GlassCard className="w-full p-8">
-          <img
-            src={logo}
-            alt="BEACON"
-            width={1024}
-            height={1024}
-            loading="lazy"
-            className="mx-auto h-20 w-20 object-contain"
-          />
-          <h1 className="mt-5 text-center text-2xl font-bold text-foreground">Create your account</h1>
+      <div className="mx-auto flex w-full max-w-sm flex-1 items-center py-8">
+        <GlassCard className="w-full p-8 lg:p-10">
+          <div className="relative mx-auto h-24 w-24">
+            <div className="absolute inset-0 rounded-full bg-[var(--sand)]/25 blur-2xl" />
+            <img
+              src={logo}
+              alt="BEACON"
+              width={1024}
+              height={1024}
+              loading="lazy"
+              className="relative z-10 h-full w-full object-contain drop-shadow-[0_8px_24px_rgba(201,165,116,0.45)]"
+            />
+          </div>
+
+          <h1 className="mt-6 text-center text-2xl font-bold tracking-tight text-foreground lg:text-3xl">
+            Create your account
+          </h1>
           <p className="mt-1 text-center text-sm text-muted-foreground">
-            Safe Travel. Smart Response.
+            Join BEACON and travel with confidence.
           </p>
 
-          <form onSubmit={onSubmit} className="mt-5 space-y-4">
+          <form onSubmit={onSubmit} className="mt-8 space-y-5">
             <Field label="Full name" value={fullName} onChange={setFullName} placeholder="Asha Rao" />
             <Field
               label="Email"
@@ -105,7 +111,7 @@ function SignupPage() {
             </PressButton>
           </form>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
+          <p className="mt-8 text-center text-sm text-muted-foreground">
             Already registered?{" "}
             <Link to="/login" className="font-semibold text-[var(--sand)]">
               Log in

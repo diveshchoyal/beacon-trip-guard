@@ -10,7 +10,7 @@
 export interface CrowdXLocation {
   id: string;
   name: string;
-  type: "mall" | "beach" | "park" | "transit" | "custom";
+  type: "mall" | "beach" | "park" | "transit" | "harbour" | "market" | "custom";
   address: string;
   lat: number;
   lng: number;
@@ -19,6 +19,39 @@ export interface CrowdXLocation {
 }
 
 export const CROWDX_MONITORED_LOCATIONS: CrowdXLocation[] = [
+  // North Chennai
+  {
+    id: "loc_tondiarpet",
+    name: "Tondiarpet Commercial Hub",
+    type: "market",
+    address: "TH Road, Tondiarpet, Chennai",
+    lat: 13.1250,
+    lng: 80.2890,
+    capacity: 6000,
+    cameraId: "cam_tondiarpet_01",
+  },
+  {
+    id: "loc_kasimedu",
+    name: "Kasimedu Harbour Promenade",
+    type: "harbour",
+    address: "Kasimedu, Royapuram, Chennai",
+    lat: 13.1250,
+    lng: 80.2970,
+    capacity: 12000,
+    cameraId: "cam_kasimedu_01",
+  },
+  {
+    id: "loc_royapuram",
+    name: "Royapuram Heritage Zone",
+    type: "transit",
+    address: "Royapuram, Chennai",
+    lat: 13.1098,
+    lng: 80.2945,
+    capacity: 5000,
+    cameraId: "cam_royapuram_01",
+  },
+
+  // Central & Coastal Chennai
   {
     id: "loc_005",
     name: "Marina Beach",

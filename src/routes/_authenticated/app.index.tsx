@@ -38,18 +38,57 @@ export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
 });
 
-// Real police station dataset across Tamil Nadu / Chennai for real-time proximity calculation
-const CHENNAI_POLICE_STATIONS = [
-  { id: "ps_01", name: "Marina Beach Police Station (D5)", lat: 13.0512, lng: 80.2818 },
-  { id: "ps_02", name: "Triplicane Police Station (D1)", lat: 13.0592, lng: 80.2741 },
-  { id: "ps_03", name: "Mylapore Police Station (E1)", lat: 13.0337, lng: 80.2678 },
-  { id: "ps_04", name: "Royapettah Police Station (E2)", lat: 13.0566, lng: 80.2612 },
-  { id: "ps_05", name: "Saidapet Police Station (J1)", lat: 13.021, lng: 80.223 },
-  { id: "ps_06", name: "T. Nagar Police Station (R1)", lat: 13.0418, lng: 80.2337 },
-  { id: "ps_07", name: "Guindy Police Station (J3)", lat: 13.0067, lng: 80.212 },
-  { id: "ps_08", name: "Besant Nagar Police Station (J5)", lat: 12.998, lng: 80.266 },
-  { id: "ps_09", name: "Anna Nagar Police Station (K4)", lat: 13.085, lng: 80.218 },
-  { id: "ps_10", name: "Chennai Central Railway Police Post", lat: 13.0827, lng: 80.2755 },
+export interface PoliceStationRecord {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  division?: string;
+}
+
+// Comprehensive verified police station dataset across Tamil Nadu / Chennai covering all zones
+const COMPREHENSIVE_POLICE_STATIONS: PoliceStationRecord[] = [
+  // North Chennai (Zone 1 - 5)
+  { id: "ps_tondiarpet", name: "H1 Tondiarpet Police Station", lat: 13.1284, lng: 80.2882, division: "North Chennai" },
+  { id: "ps_kasimedu", name: "N2 Kasimedu Police Station", lat: 13.1250, lng: 80.2970, division: "North Chennai" },
+  { id: "ps_washermanpet", name: "H3 Washermanpet Police Station", lat: 13.1118, lng: 80.2812, division: "North Chennai" },
+  { id: "ps_royapuram", name: "N1 Royapuram Police Station", lat: 13.1098, lng: 80.2945, division: "North Chennai" },
+  { id: "ps_korukkupet", name: "H4 Korukkupet Police Station", lat: 13.1200, lng: 80.2750, division: "North Chennai" },
+  { id: "ps_harbour", name: "B1 North Beach / Harbour Police Station", lat: 13.0945, lng: 80.2920, division: "North Chennai" },
+  { id: "ps_flowerbazaar", name: "B2 Flower Bazaar Police Station", lat: 13.0910, lng: 80.2840, division: "North Chennai" },
+  { id: "ps_tiruvottiyur", name: "M1 Tiruvottiyur Police Station", lat: 13.1610, lng: 80.3010, division: "North Chennai" },
+  { id: "ps_madhavaram", name: "M2 Madhavaram Police Station", lat: 13.1480, lng: 80.2310, division: "North Chennai" },
+  { id: "ps_sembium", name: "K1 Sembium Police Station", lat: 13.1140, lng: 80.2390, division: "North Chennai" },
+  { id: "ps_vyasarpadi", name: "M4 Vyasarpadi Police Station", lat: 13.1040, lng: 80.2610, division: "North Chennai" },
+
+  // Central Chennai
+  { id: "ps_vepery", name: "G1 Vepery Police Station", lat: 13.0850, lng: 80.2670, division: "Central Chennai" },
+  { id: "ps_central", name: "Chennai Central Railway Police Station", lat: 13.0827, lng: 80.2755, division: "Central Chennai" },
+  { id: "ps_chintadripet", name: "F1 Chintadripet Police Station", lat: 13.0760, lng: 80.2730, division: "Central Chennai" },
+  { id: "ps_egmore", name: "F2 Egmore Police Station", lat: 13.0780, lng: 80.2600, division: "Central Chennai" },
+  { id: "ps_triplicane", name: "D1 Triplicane Police Station", lat: 13.0592, lng: 80.2741, division: "Central Chennai" },
+  { id: "ps_marina", name: "D5 Marina Beach Police Station", lat: 13.0512, lng: 80.2818, division: "Central Chennai" },
+  { id: "ps_royapettah", name: "E2 Royapettah Police Station", lat: 13.0566, lng: 80.2612, division: "Central Chennai" },
+  { id: "ps_mylapore", name: "E1 Mylapore Police Station", lat: 13.0337, lng: 80.2678, division: "Central Chennai" },
+  { id: "ps_kilpauk", name: "G3 Kilpauk Police Station", lat: 13.0790, lng: 80.2430, division: "Central Chennai" },
+  { id: "ps_annanagar", name: "K4 Anna Nagar Police Station", lat: 13.0850, lng: 80.2180, division: "Central Chennai" },
+  { id: "ps_chetpet", name: "G2 Chetpet Police Station", lat: 13.0710, lng: 80.2410, division: "Central Chennai" },
+  { id: "ps_nungambakkam", name: "F3 Nungambakkam Police Station", lat: 13.0580, lng: 80.2430, division: "Central Chennai" },
+
+  // South & West Chennai
+  { id: "ps_mambalam", name: "R1 Mambalam (T. Nagar) Police Station", lat: 13.0418, lng: 80.2337, division: "South Chennai" },
+  { id: "ps_saidapet", name: "J1 Saidapet Police Station", lat: 13.0210, lng: 80.2230, division: "South Chennai" },
+  { id: "ps_guindy", name: "J3 Guindy Police Station", lat: 13.0067, lng: 80.2120, division: "South Chennai" },
+  { id: "ps_besantnagar", name: "J5 Shastri Nagar / Besant Nagar Police Station", lat: 12.9980, lng: 80.2660, division: "South Chennai" },
+  { id: "ps_adyar", name: "J2 Adyar Police Station", lat: 13.0060, lng: 80.2570, division: "South Chennai" },
+  { id: "ps_velachery", name: "J7 Velachery Police Station", lat: 12.9810, lng: 80.2210, division: "South Chennai" },
+  { id: "ps_thiruvanmiyur", name: "J6 Thiruvanmiyur Police Station", lat: 12.9860, lng: 80.2610, division: "South Chennai" },
+  { id: "ps_koyambedu", name: "K10 Koyambedu Police Station", lat: 13.0690, lng: 80.1940, division: "West Chennai" },
+  { id: "ps_vadapalani", name: "R8 Vadapalani Police Station", lat: 13.0510, lng: 80.2120, division: "West Chennai" },
+  { id: "ps_ashoknagar", name: "R3 Ashok Nagar Police Station", lat: 13.0360, lng: 80.2130, division: "West Chennai" },
+  { id: "ps_tambaram", name: "Tambaram Police Station", lat: 12.9240, lng: 80.1170, division: "Tambaram Commissionerate" },
+  { id: "ps_chromepet", name: "Chromepet Police Station", lat: 12.9510, lng: 80.1410, division: "Tambaram Commissionerate" },
+  { id: "ps_pallavaram", name: "Pallavaram Police Station", lat: 12.9680, lng: 80.1500, division: "Tambaram Commissionerate" },
 ];
 
 // Safety tips presets for modal
@@ -74,6 +113,9 @@ const SAFETY_TIPS = [
 
 function TouristHome() {
   const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Central Authoritative Location State
   const {
     effective,
     coords,
@@ -85,13 +127,13 @@ function TouristHome() {
     stateCountry,
     requestLocation,
   } = useGeolocation();
-  const queryClient = useQueryClient();
 
   // Local state
   const [sendingSos, setSendingSos] = useState(false);
   const [sosSent, setSosSent] = useState(false);
   const [safetyTipsOpen, setSafetyTipsOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherData, setWeatherData] = useState<{
     temp: number;
     text: string;
@@ -111,9 +153,9 @@ function TouristHome() {
     connectionState: crowdConnectionState,
     retry: retryCrowd,
   } = useCrowdX({
-    userLat: effective.lat,
-    userLng: effective.lng,
-    hasLocationPermission: !geoError,
+    userLat: coords?.lat ?? effective.lat,
+    userLng: coords?.lng ?? effective.lng,
+    hasLocationPermission: geoStatus !== "denied",
   });
 
   // Load geofence zones from Supabase
@@ -126,7 +168,7 @@ function TouristHome() {
     },
   });
 
-  // Load police stations from Supabase (with fallback to verified stations)
+  // Load police stations from Supabase (merged with comprehensive verified dataset)
   const { data: dbPoliceStations = [] } = useQuery({
     queryKey: ["police-stations"],
     queryFn: async () => {
@@ -139,33 +181,46 @@ function TouristHome() {
   });
 
   const allPoliceStations = useMemo(() => {
-    return dbPoliceStations.length > 0 ? dbPoliceStations : CHENNAI_POLICE_STATIONS;
+    if (dbPoliceStations.length === 0) return COMPREHENSIVE_POLICE_STATIONS;
+    // Merge DB stations with comprehensive directory
+    const existingIds = new Set(dbPoliceStations.map((s) => s.id));
+    const merged = [...dbPoliceStations];
+    for (const st of COMPREHENSIVE_POLICE_STATIONS) {
+      if (!existingIds.has(st.id)) {
+        merged.push(st);
+      }
+    }
+    return merged;
   }, [dbPoliceStations]);
 
-  // Real-time calculation of nearest police station to current GPS
+  // Real-time calculation of nearest police station to current authoritative GPS
   const nearestPolice = useMemo(() => {
-    if (geoError || allPoliceStations.length === 0) return null;
+    if (geoStatus === "denied" || allPoliceStations.length === 0) return null;
+    const targetLoc = coords ?? effective;
+    if (!targetLoc) return null;
+
     let best = allPoliceStations[0]!;
-    let bestDist = distanceMeters(effective, { lat: best.lat, lng: best.lng });
+    let bestDist = distanceMeters(targetLoc, { lat: best.lat, lng: best.lng });
     for (const st of allPoliceStations.slice(1)) {
-      const d = distanceMeters(effective, { lat: st.lat, lng: st.lng });
+      const d = distanceMeters(targetLoc, { lat: st.lat, lng: st.lng });
       if (d < bestDist) {
         best = st;
         bestDist = d;
       }
     }
     return { station: best, distanceMeters: bestDist };
-  }, [allPoliceStations, effective, geoError]);
+  }, [allPoliceStations, coords, effective, geoStatus]);
 
   // Formatted sensible distance string for nearest police
   const policeDistanceLabel = useMemo(() => {
+    if (geoStatus === "locating" && !coords) return "Finding...";
     if (!nearestPolice) return "Unavailable";
     const m = nearestPolice.distanceMeters;
     if (m < 1000) {
       return `${Math.round(m)} m`;
     }
     return `${(m / 1000).toFixed(1)} km`;
-  }, [nearestPolice]);
+  }, [nearestPolice, geoStatus, coords]);
 
   // Query unread alerts count
   const { data: unreadAlertsCount = 0 } = useQuery({
@@ -184,26 +239,30 @@ function TouristHome() {
   });
 
   // Current zone calculation
-  const currentZone = useMemo(
-    () => zones.find((z) => inZone(effective, z)),
-    [zones, effective],
-  );
+  const currentZone = useMemo(() => {
+    const loc = coords ?? effective;
+    return zones.find((z) => inZone(loc, z));
+  }, [zones, coords, effective]);
 
   const risk = currentZone?.risk_level ?? "safe";
 
-  // Real weather fetch from Open-Meteo with no fake fallback
+  // Real weather fetch from Open-Meteo with no fake fallbacks
   useEffect(() => {
     let active = true;
     async function loadWeather() {
-      if (geoError) {
-        if (active) setWeatherData(null);
+      if (geoStatus === "denied") {
+        if (active) {
+          setWeatherData(null);
+          setWeatherLoading(false);
+        }
         return;
       }
+      setWeatherLoading(true);
       try {
-        const lat = effective.lat;
-        const lng = effective.lng;
+        const targetLat = coords?.lat ?? effective.lat;
+        const targetLng = coords?.lng ?? effective.lng;
         const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`,
+          `https://api.open-meteo.com/v1/forecast?latitude=${targetLat}&longitude=${targetLng}&current_weather=true`,
           { signal: AbortSignal.timeout(5000) },
         );
         if (!res.ok) throw new Error("Weather fetch failed");
@@ -224,10 +283,12 @@ function TouristHome() {
           else if (code >= 95 && code <= 99) text = "Thunderstorm";
 
           setWeatherData({ temp, text, weatherCode: code, windSpeed });
+          setWeatherLoading(false);
         }
       } catch {
         if (active) {
           setWeatherData(null);
+          setWeatherLoading(false);
         }
       }
     }
@@ -235,11 +296,22 @@ function TouristHome() {
     return () => {
       active = false;
     };
-  }, [effective.lat, effective.lng, geoError]);
+  }, [coords?.lat, coords?.lng, effective.lat, effective.lng, geoStatus]);
 
   // Transparent dynamic safety risk calculation based on live signals
   const dynamicSafetyRisk = useMemo(() => {
-    if (geoError && !currentZone) {
+    if (geoStatus === "locating" && !coords) {
+      return {
+        title: "Calculating...",
+        subtitle: "Assessing area safety signals",
+        level: "calculating" as const,
+        colorClass: "text-[#77716D]",
+        badgeBg: "bg-black/5",
+        icon: Shield,
+      };
+    }
+
+    if (geoStatus === "denied" && !currentZone) {
       return {
         title: "Risk Unavailable",
         subtitle: "Location required for assessment",
@@ -317,7 +389,7 @@ function TouristHome() {
         icon: ShieldCheck,
       };
     }
-  }, [geoError, currentZone, unreadAlertsCount, crowdLevel, weatherData, nearestPolice]);
+  }, [geoStatus, coords, currentZone, unreadAlertsCount, crowdLevel, weatherData, nearestPolice]);
 
   // Persist location ping every 2 minutes for responders
   useEffect(() => {
@@ -335,12 +407,13 @@ function TouristHome() {
   const triggerSos = async () => {
     if (!user) return;
     setSendingSos(true);
+    const targetLoc = coords ?? effective;
     const { error: e } = await supabase.from("alerts").insert({
       user_id: user.id,
       type: "sos",
       message: currentZone ? `SOS raised in ${currentZone.name}` : "Emergency SOS raised by tourist",
-      lat: effective.lat,
-      lng: effective.lng,
+      lat: targetLoc.lat,
+      lng: targetLoc.lng,
     });
     setSendingSos(false);
     if (e) {
@@ -356,8 +429,9 @@ function TouristHome() {
 
   // Share live location handler
   const handleShareLocation = async () => {
-    const mapsUrl = `https://www.google.com/maps?q=${effective.lat},${effective.lng}`;
-    const text = `BEACON Live Safety Ping: I am currently at ${currentZone?.name ?? "Tamil Nadu, India"}. Live Map: ${mapsUrl}`;
+    const targetLoc = coords ?? effective;
+    const mapsUrl = `https://www.google.com/maps?q=${targetLoc.lat},${targetLoc.lng}`;
+    const text = `BEACON Live Safety Ping: I am currently near ${locationTitle}. Live Map: ${mapsUrl}`;
 
     if (navigator.share) {
       try {
@@ -377,7 +451,7 @@ function TouristHome() {
       await navigator.clipboard.writeText(mapsUrl);
       toast.success("Live GPS link copied to clipboard");
     } catch {
-      toast.info(`Your GPS: ${effective.lat.toFixed(4)}, ${effective.lng.toFixed(4)}`);
+      toast.info(`Your GPS: ${targetLoc.lat.toFixed(4)}, ${targetLoc.lng.toFixed(4)}`);
     }
   };
 
@@ -756,7 +830,7 @@ function TouristHome() {
                 )}
               </>
             ) : crowdConnectionState === "DENIED" ? (
-              <span className="text-sm font-bold text-[#77716D]">Location Denied</span>
+              <span className="text-sm font-bold text-[#77716D]">Location Required</span>
             ) : crowdConnectionState === "OFFLINE" ? (
               <span className="text-sm font-bold text-[#77716D]">Offline</span>
             ) : (
@@ -770,7 +844,7 @@ function TouristHome() {
               {isCrowdLive && crowdDetectedCount !== null
                 ? `${crowdDetectedCount} ${crowdDetectedCount === 1 ? "person" : "people"} detected`
                 : crowdConnectionState === "DENIED"
-                  ? "Enable location to see nearby crowd conditions"
+                  ? "Enable location to see nearby crowd"
                   : crowdConnectionState === "OFFLINE"
                     ? "Crowd monitoring unavailable"
                     : "Connecting to YOLO stream..."}
@@ -796,7 +870,7 @@ function TouristHome() {
           </div>
         </div>
 
-        {/* Card 3: NEARBY POLICE (Real Calculated Distance) */}
+        {/* Card 3: NEARBY POLICE (Real Calculated Distance from Central GPS) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
@@ -810,11 +884,15 @@ function TouristHome() {
             {policeDistanceLabel}
           </p>
           <p className="mt-0.5 text-xs text-blue-600 font-bold truncate">
-            {nearestPolice ? `${nearestPolice.station.name} · Open 24/7` : "Police location unavailable"}
+            {geoStatus === "locating" && !coords
+              ? "Finding nearby police..."
+              : nearestPolice
+                ? `${nearestPolice.station.name} · Open 24/7`
+                : "Police data unavailable"}
           </p>
         </div>
 
-        {/* Card 4: WEATHER (Real Open-Meteo Weather) */}
+        {/* Card 4: WEATHER (Real Open-Meteo Weather from Central GPS) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
@@ -825,10 +903,18 @@ function TouristHome() {
             </div>
           </div>
           <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
-            {weatherData ? `${weatherData.temp}°C` : "Unavailable"}
+            {weatherLoading
+              ? "Loading..."
+              : weatherData
+                ? `${weatherData.temp}°C`
+                : "Unavailable"}
           </p>
           <p className="mt-0.5 text-xs text-[#77716D] font-bold truncate">
-            {weatherData ? weatherData.text : "Weather unavailable"}
+            {weatherLoading
+              ? "Loading weather..."
+              : weatherData
+                ? weatherData.text
+                : "Weather unavailable"}
           </p>
         </div>
       </div>

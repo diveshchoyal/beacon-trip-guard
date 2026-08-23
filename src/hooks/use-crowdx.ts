@@ -1,12 +1,14 @@
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   type CrowdDensityStatus,
+  type CrowdConnectionState,
   type CrowdXLocation,
   type CrowdXCamera,
   CROWDX_MONITORED_LOCATIONS,
   findNearestCrowdXLocation,
   classifyCrowdDensity,
   getCrowdXConfig,
+  getCrowdXStreamEndpoints,
 } from "@/lib/crowdx";
 
 interface UseCrowdXOptions {
@@ -22,15 +24,16 @@ export function useCrowdX({
 }: UseCrowdXOptions) {
   const [detectedCount, setDetectedCount] = useState<number | null>(null);
   const [lastUpdatedTimestamp, setLastUpdatedTimestamp] = useState<number | null>(null);
-  const [connectionState, setConnectionState] = useState<
-    "connecting" | "live" | "stale" | "disconnected" | "unavailable" | "denied"
-  >("connecting");
+  const [connectionState, setConnectionState] = useState<CrowdConnectionState>("CONNECTING");
   const [statusMessage, setStatusMessage] = useState<string>("");
-  const [freshnessText, setFreshnessText] = useState<string>("Waiting for data");
+  const [freshnessText, setFreshnessText] = useState<string>("Connecting...");
   const [cameras, setCameras] = useState<CrowdXCamera[]>([]);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const connectionTimeoutRef = useRef<number | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const retryCountRef = useRef(0);
 
   const { apiUrl, wsUrl } = useMemo(() => getCrowdXConfig(), []);
 
@@ -40,13 +43,13 @@ export function useCrowdX({
     return findNearestCrowdXLocation(userLat, userLng, CROWDX_MONITORED_LOCATIONS);
   }, [userLat, userLng]);
 
-  // Fetch available camera inventory from CrowdX backend
+  // Fetch available camera inventory from CrowdX backend (if live)
   useEffect(() => {
     let active = true;
     async function loadCameras() {
       try {
         const res = await fetch(`${apiUrl}/api/rtsp/cameras`, {
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(3500),
         });
         if (res.ok) {
           const data = await res.json();
@@ -55,20 +58,28 @@ export function useCrowdX({
           }
         }
       } catch {
-        // Backend not currently reachable
+        // Backend not reachable
       }
     }
     void loadCameras();
     return () => {
       active = false;
     };
-  }, [apiUrl]);
+  }, [apiUrl, retryTrigger]);
+
+  // Manual retry handler
+  const retry = useCallback(() => {
+    retryCountRef.current = 0;
+    setConnectionState("CONNECTING");
+    setStatusMessage("Retrying YOLO stream connection...");
+    setRetryTrigger((prev) => prev + 1);
+  }, []);
 
   // Establish WebSocket connection to CrowdX YOLO stream
   useEffect(() => {
-    // 1. Check location permission
+    // 1. Location permission check
     if (!hasLocationPermission) {
-      setConnectionState("denied");
+      setConnectionState("DENIED");
       setStatusMessage("Enable location to see nearby crowd conditions");
       setDetectedCount(null);
       return;
@@ -76,7 +87,7 @@ export function useCrowdX({
 
     // 2. Check if nearest location is known
     if (!nearestMatch || !userLat || !userLng) {
-      setConnectionState("unavailable");
+      setConnectionState("OFFLINE");
       setStatusMessage("Crowd monitoring unavailable at this location");
       setDetectedCount(null);
       return;
@@ -84,18 +95,29 @@ export function useCrowdX({
 
     const { location, distanceKm } = nearestMatch;
 
-    // If tourist is too far (> 50 km) from any monitored Chennai camera
+    // If tourist is too far (> 50 km) from any monitored camera
     if (distanceKm > 50) {
-      setConnectionState("unavailable");
+      setConnectionState("OFFLINE");
       setStatusMessage("Crowd monitoring unavailable at this location");
       setDetectedCount(null);
       return;
     }
 
-    // Determine camera ID to subscribe to
-    const targetCameraId = location.cameraId || location.id || "cam_marina_01";
+    // Determine target camera ID (check backend cameras if available, or location default)
+    let targetCameraId = location.cameraId || location.id || "cam_marina_01";
+    if (cameras.length > 0) {
+      const match = cameras.find(
+        (c) =>
+          c.id === location.cameraId ||
+          c.location?.toLowerCase().includes(location.name.toLowerCase()) ||
+          c.name?.toLowerCase().includes(location.name.toLowerCase()),
+      );
+      if (match?.id) {
+        targetCameraId = match.id;
+      }
+    }
 
-    // Clean up existing WebSocket
+    // Clean up existing connections & timers
     if (wsRef.current) {
       try {
         wsRef.current.close();
@@ -105,67 +127,124 @@ export function useCrowdX({
       wsRef.current = null;
     }
 
+    if (connectionTimeoutRef.current) {
+      window.clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+
     if (reconnectTimeoutRef.current) {
       window.clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
 
-    setConnectionState("connecting");
-    setStatusMessage("Connecting to YOLO vision engine...");
+    setConnectionState("CONNECTING");
+    setStatusMessage("Connecting to YOLO stream...");
 
     let isSubscribed = true;
+    const candidateEndpoints = getCrowdXStreamEndpoints(wsUrl, targetCameraId);
+    let currentEndpointIndex = 0;
 
-    try {
-      const streamEndpoint = `${wsUrl}/api/rtsp/ws/stream/${targetCameraId}`;
-      const ws = new WebSocket(streamEndpoint);
-      wsRef.current = ws;
+    function attemptConnection(endpointIndex: number) {
+      if (!isSubscribed) return;
 
-      ws.onopen = () => {
-        if (!isSubscribed) return;
-        setConnectionState("live");
-        setStatusMessage("Live YOLO detection connected");
-      };
+      const endpoint = candidateEndpoints[endpointIndex] || candidateEndpoints[0];
 
-      ws.onmessage = (event) => {
-        if (!isSubscribed) return;
+      try {
+        const ws = new WebSocket(endpoint);
+        wsRef.current = ws;
 
-        // JSON detection count data from YOLO engine
-        if (typeof event.data === "string") {
-          try {
-            const data = JSON.parse(event.data);
-            if (typeof data.count === "number") {
-              setDetectedCount(data.count);
-              setLastUpdatedTimestamp(Date.now());
-              setConnectionState("live");
+        // 5-second connection timeout
+        connectionTimeoutRef.current = window.setTimeout(() => {
+          if (!isSubscribed) return;
+          if (ws.readyState !== WebSocket.OPEN) {
+            try {
+              ws.close();
+            } catch {
+              // Ignore
             }
-          } catch {
-            // Non-JSON frame event
+            handleFailure();
           }
-        }
-      };
+        }, 5000);
 
-      ws.onerror = () => {
-        if (!isSubscribed) return;
-        setConnectionState("disconnected");
-        setStatusMessage("Live connection lost");
-      };
+        ws.onopen = () => {
+          if (!isSubscribed) return;
+          if (connectionTimeoutRef.current) {
+            window.clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
+          retryCountRef.current = 0;
+          setConnectionState("LIVE");
+          setStatusMessage("Live YOLO detection connected");
+        };
 
-      ws.onclose = () => {
-        if (!isSubscribed) return;
-        setConnectionState("disconnected");
-        setStatusMessage("Live connection lost");
+        ws.onmessage = (event) => {
+          if (!isSubscribed) return;
 
-        // Schedule auto-reconnect attempt
+          // Process JSON detection data from YOLO
+          if (typeof event.data === "string") {
+            try {
+              const data = JSON.parse(event.data);
+              if (typeof data.count === "number") {
+                setDetectedCount(data.count);
+                setLastUpdatedTimestamp(Date.now());
+                setConnectionState("LIVE");
+              }
+            } catch {
+              // Non-JSON frame
+            }
+          }
+        };
+
+        ws.onerror = () => {
+          if (!isSubscribed) return;
+          handleFailure();
+        };
+
+        ws.onclose = () => {
+          if (!isSubscribed) return;
+          handleFailure();
+        };
+      } catch {
+        handleFailure();
+      }
+    }
+
+    function handleFailure() {
+      if (!isSubscribed) return;
+
+      if (connectionTimeoutRef.current) {
+        window.clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
+
+      // Try next endpoint candidate if available
+      if (currentEndpointIndex < candidateEndpoints.length - 1) {
+        currentEndpointIndex += 1;
+        attemptConnection(currentEndpointIndex);
+        return;
+      }
+
+      // All candidate endpoints failed -> Transition to OFFLINE
+      setConnectionState("OFFLINE");
+      setStatusMessage("Crowd monitoring unavailable");
+
+      // Exponential backoff reconnect: attempt up to 3 times (5s, 10s, 20s), then stay OFFLINE
+      if (retryCountRef.current < 3) {
+        const delay = Math.min(30000, 5000 * Math.pow(2, retryCountRef.current));
+        retryCountRef.current += 1;
+
         reconnectTimeoutRef.current = window.setTimeout(() => {
           if (isSubscribed) {
-            setConnectionState("connecting");
+            currentEndpointIndex = 0;
+            setConnectionState("CONNECTING");
+            attemptConnection(0);
           }
-        }, 12000);
-      };
-    } catch {
-      setConnectionState("unavailable");
-      setStatusMessage("Crowd monitoring unavailable at this location");
+        }, delay);
+      }
     }
+
+    // Start initial connection attempt
+    attemptConnection(0);
 
     return () => {
       isSubscribed = false;
@@ -177,25 +256,30 @@ export function useCrowdX({
         }
         wsRef.current = null;
       }
+      if (connectionTimeoutRef.current) {
+        window.clearTimeout(connectionTimeoutRef.current);
+      }
       if (reconnectTimeoutRef.current) {
         window.clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, [hasLocationPermission, nearestMatch, userLat, userLng, wsUrl]);
+  }, [hasLocationPermission, nearestMatch, userLat, userLng, wsUrl, cameras, retryTrigger]);
 
   // Dynamic freshness calculation tick
   useEffect(() => {
     const updateFreshness = () => {
-      if (!lastUpdatedTimestamp) {
-        if (connectionState === "connecting") {
-          setFreshnessText("Connecting to YOLO engine...");
-        } else if (connectionState === "denied") {
-          setFreshnessText("Location required");
-        } else if (connectionState === "unavailable") {
-          setFreshnessText("Unavailable here");
-        } else {
-          setFreshnessText("Live connection lost");
-        }
+      if (connectionState === "CONNECTING") {
+        setFreshnessText("Connecting...");
+        return;
+      }
+
+      if (connectionState === "DENIED") {
+        setFreshnessText("Location required");
+        return;
+      }
+
+      if (connectionState === "OFFLINE" || !lastUpdatedTimestamp) {
+        setFreshnessText("Unavailable");
         return;
       }
 
@@ -222,7 +306,7 @@ export function useCrowdX({
     const matchedLoc: CrowdXLocation | null = nearestMatch?.location ?? null;
     const distanceKm: number | null = nearestMatch?.distanceKm ?? null;
 
-    if (connectionState === "denied") {
+    if (connectionState === "DENIED") {
       return {
         level: "Unknown",
         colorClass: "text-[#77716D]",
@@ -231,17 +315,17 @@ export function useCrowdX({
         detectedCount: null,
         densityPercentage: null,
         label: "Location Required",
-        subLabel: "Enable location to see nearby crowd",
+        subLabel: "Enable location to see nearby crowd conditions",
         matchedLocation: null,
         distanceKm: null,
         isLive: false,
         statusText: "Location required",
         lastUpdatedTimestamp: null,
-        connectionState: "denied",
+        connectionState: "DENIED",
       };
     }
 
-    if (connectionState === "unavailable" || !matchedLoc) {
+    if (connectionState === "OFFLINE" || !matchedLoc) {
       return {
         level: "Unknown",
         colorClass: "text-[#77716D]",
@@ -249,19 +333,19 @@ export function useCrowdX({
         badgeText: "text-[#77716D]",
         detectedCount: null,
         densityPercentage: null,
-        label: "Unavailable",
-        subLabel: "Crowd monitoring unavailable here",
+        label: "Offline",
+        subLabel: "Crowd monitoring unavailable",
         matchedLocation: matchedLoc,
         distanceKm,
         isLive: false,
-        statusText: "Monitoring unavailable",
+        statusText: "Crowd monitoring unavailable",
         lastUpdatedTimestamp: null,
-        connectionState: "unavailable",
+        connectionState: "OFFLINE",
       };
     }
 
-    // When we have a live detected count from YOLO
-    if (detectedCount !== null) {
+    // LIVE detection from YOLO
+    if (detectedCount !== null && connectionState === "LIVE") {
       const classification = classifyCrowdDensity(detectedCount, matchedLoc.capacity);
       const isStale =
         lastUpdatedTimestamp !== null && (Date.now() - lastUpdatedTimestamp) / 1000 > 45;
@@ -277,14 +361,14 @@ export function useCrowdX({
         subLabel: `${detectedCount} people detected`,
         matchedLocation: matchedLoc,
         distanceKm,
-        isLive: connectionState === "live" && !isStale,
+        isLive: !isStale,
         statusText: isStale ? "Data delayed" : "Live YOLO detection",
         lastUpdatedTimestamp,
-        connectionState: isStale ? "stale" : connectionState,
+        connectionState: isStale ? "OFFLINE" : "LIVE",
       };
     }
 
-    // Initial connecting state
+    // CONNECTING state
     return {
       level: "Unknown",
       colorClass: "text-[#77716D]",
@@ -293,13 +377,13 @@ export function useCrowdX({
       detectedCount: null,
       densityPercentage: null,
       label: "Connecting...",
-      subLabel: "Contacting camera feed",
+      subLabel: "Connecting to YOLO stream...",
       matchedLocation: matchedLoc,
       distanceKm,
       isLive: false,
-      statusText: "Connecting to camera",
+      statusText: "Connecting to stream",
       lastUpdatedTimestamp: null,
-      connectionState: "connecting",
+      connectionState: "CONNECTING",
     };
   }, [connectionState, detectedCount, lastUpdatedTimestamp, nearestMatch]);
 
@@ -307,5 +391,6 @@ export function useCrowdX({
     ...crowdStatus,
     freshnessText,
     cameras,
+    retry,
   };
 }

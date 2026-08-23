@@ -142,21 +142,23 @@ export interface CrowdXCamera {
 
 export type CrowdLevel = "Low" | "Moderate" | "Busy" | "Very Busy" | "Unknown";
 
+export type CrowdConnectionState = "CONNECTING" | "LIVE" | "OFFLINE" | "DENIED";
+
 export interface CrowdDensityStatus {
   level: CrowdLevel;
-  colorClass: string; // Tailwind color class or hex
+  colorClass: string;
   badgeBg: string;
   badgeText: string;
   detectedCount: number | null;
   densityPercentage: number | null;
-  label: string; // e.g. "42 people detected" or "24% occupied"
+  label: string;
   subLabel: string;
   matchedLocation: CrowdXLocation | null;
   distanceKm: number | null;
   isLive: boolean;
   statusText: string;
   lastUpdatedTimestamp: number | null;
-  connectionState: "connecting" | "live" | "stale" | "disconnected" | "unavailable" | "denied";
+  connectionState: CrowdConnectionState;
 }
 
 /**
@@ -220,7 +222,6 @@ export function classifyCrowdDensity(
   subLabel: string;
 } {
   if (capacity && capacity > 0) {
-    // When location capacity is known
     const pct = Math.min(100, Math.max(0, Math.round((detectedCount / capacity) * 100)));
 
     if (pct <= 30) {
@@ -304,18 +305,38 @@ export function classifyCrowdDensity(
 
 /**
  * CrowdX Environment Configuration
+ * Supports VITE_CROWDX_WS_URL and VITE_CROWDX_API_URL
  */
 export function getCrowdXConfig() {
+  const envObj = (import.meta as { env?: Record<string, string> }).env || {};
+
   const rawApiUrl =
-    (import.meta as { env?: Record<string, string> }).env?.VITE_CROWDX_API_URL ||
-    (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL ||
+    envObj.VITE_CROWDX_API_URL ||
+    envObj.VITE_API_URL ||
     "http://localhost:8000";
 
   const cleanApiUrl = rawApiUrl.replace(/\/$/, "");
-  const wsUrl = cleanApiUrl.replace(/^http/, "ws");
+
+  const rawWsUrl =
+    envObj.VITE_CROWDX_WS_URL ||
+    cleanApiUrl.replace(/^http/, "ws");
+
+  const cleanWsUrl = rawWsUrl.replace(/\/$/, "");
 
   return {
     apiUrl: cleanApiUrl,
-    wsUrl,
+    wsUrl: cleanWsUrl,
   };
+}
+
+/**
+ * Generates priority WebSocket endpoints for a given camera ID
+ */
+export function getCrowdXStreamEndpoints(wsUrl: string, cameraId: string): string[] {
+  const clean = wsUrl.replace(/\/$/, "");
+  return [
+    `${clean}/ws/stream/${cameraId}`,
+    `${clean}/api/rtsp/ws/stream/${cameraId}`,
+    `${clean}/ws/camera/live`,
+  ];
 }

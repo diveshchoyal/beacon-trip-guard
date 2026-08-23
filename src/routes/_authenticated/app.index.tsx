@@ -79,6 +79,7 @@ function TouristHome() {
     isLive: isCrowdLive,
     freshnessText: crowdFreshnessText,
     connectionState: crowdConnectionState,
+    retry: retryCrowd,
   } = useCrowdX({
     userLat: effective.lat,
     userLng: effective.lng,
@@ -525,12 +526,21 @@ function TouristHome() {
               <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
                 CROWD DENSITY
               </span>
-              {isCrowdLive && (
+              {isCrowdLive ? (
                 <span className="flex items-center gap-1 text-[9px] font-black text-[#39B86B] uppercase tracking-wider">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#39B86B] animate-ping" />
-                  LIVE
+                  ● LIVE
                 </span>
-              )}
+              ) : crowdConnectionState === "OFFLINE" ? (
+                <span className="flex items-center gap-1 text-[9px] font-bold text-[#77716D] uppercase tracking-wider">
+                  ○ OFFLINE
+                </span>
+              ) : crowdConnectionState === "CONNECTING" ? (
+                <span className="flex items-center gap-1 text-[9px] font-bold text-[#F2A93B] uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#F2A93B] animate-pulse" />
+                  CONNECTING
+                </span>
+              ) : null}
             </div>
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FF6F61]/15 text-[#FF6F61]">
               <Users className="h-4 w-4" />
@@ -539,7 +549,7 @@ function TouristHome() {
 
           {/* Dynamic Status / Count */}
           <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
-            {crowdDetectedCount !== null ? (
+            {isCrowdLive && crowdDetectedCount !== null ? (
               <>
                 <span>{crowdLevel}</span>
                 {crowdDensityPercentage !== null && (
@@ -548,32 +558,43 @@ function TouristHome() {
                   </span>
                 )}
               </>
-            ) : crowdConnectionState === "denied" ? (
+            ) : crowdConnectionState === "DENIED" ? (
               <span className="text-sm font-bold text-[#77716D]">Location Denied</span>
-            ) : crowdConnectionState === "unavailable" ? (
-              <span className="text-sm font-bold text-[#77716D]">Unavailable</span>
+            ) : crowdConnectionState === "OFFLINE" ? (
+              <span className="text-sm font-bold text-[#77716D]">Offline</span>
             ) : (
               <span className="text-sm font-bold text-[#77716D]">Connecting...</span>
             )}
           </p>
 
-          {/* SubLabel / Freshness */}
+          {/* SubLabel / Freshness & Retry Action */}
           <div className="mt-1 space-y-0.5">
-            <p className={`text-xs font-bold ${crowdColorClass}`}>
-              {crowdDetectedCount !== null
+            <p className={`text-xs font-bold ${isCrowdLive ? crowdColorClass : "text-[#77716D]"}`}>
+              {isCrowdLive && crowdDetectedCount !== null
                 ? `${crowdDetectedCount} people detected`
-                : crowdConnectionState === "denied"
+                : crowdConnectionState === "DENIED"
                   ? "Enable location to see nearby crowd conditions"
-                  : crowdConnectionState === "unavailable"
-                    ? "Crowd monitoring unavailable at this location"
+                  : crowdConnectionState === "OFFLINE"
+                    ? "Crowd monitoring unavailable"
                     : "Connecting to YOLO stream..."}
             </p>
 
-            <div className="flex items-center justify-between text-[10px] text-[#77716D]">
+            <div className="flex items-center justify-between text-[10px] text-[#77716D] pt-0.5">
               <span className="truncate max-w-[110px] sm:max-w-none">
                 {crowdMatchedLocation ? crowdMatchedLocation.name : "Chennai Area"}
               </span>
-              <span className="shrink-0 font-medium">{crowdFreshnessText}</span>
+
+              {crowdConnectionState === "OFFLINE" ? (
+                <button
+                  onClick={retryCrowd}
+                  className="font-bold text-[#FF6F61] hover:underline cursor-pointer flex items-center gap-0.5"
+                  title="Retry live stream connection"
+                >
+                  <span>Retry</span>
+                </button>
+              ) : (
+                <span className="shrink-0 font-medium">{crowdFreshnessText}</span>
+              )}
             </div>
           </div>
         </div>

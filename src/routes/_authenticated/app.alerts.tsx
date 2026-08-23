@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -7,13 +7,14 @@ import {
   AlertTriangle,
   ArrowRight,
   Bell,
-  Building2,
+  Check,
+  CheckCheck,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
   CloudRain,
   CloudSun,
   ExternalLink,
+  Eye,
   HelpCircle,
   Info,
   MapPin,
@@ -25,6 +26,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Users,
   X,
   Zap,
@@ -60,7 +62,11 @@ export interface ProactiveSafetyAlert {
   actionType: "map" | "guidance" | "helpline" | "route";
   actionLabel: string;
   actionUrl?: string;
+  isSimulated?: boolean;
 }
+
+const READ_ALERTS_KEY = "beacon_read_alert_ids_v1";
+const CLEARED_PROACTIVE_KEY = "beacon_cleared_proactive_ids_v1";
 
 function AlertsModule() {
   const { user, profile } = useAuth();
@@ -89,8 +95,8 @@ function AlertsModule() {
     connectionState: crowdConnectionState,
     retry: retryCrowd,
   } = useCrowdX({
-    userLat: coords?.lat ?? effective.lat,
-    userLng: coords?.lng ?? effective.lng,
+    userLat: coords?.lat ?? effective?.lat ?? 13.0827,
+    userLng: coords?.lng ?? effective?.lng ?? 80.2707,
     hasLocationPermission: geoStatus !== "denied",
   });
 
@@ -98,6 +104,34 @@ function AlertsModule() {
   const [activeTab, setActiveTab] = useState<"all" | "active" | "sos" | "advisories">("all");
   const [expandedWhyIds, setExpandedWhyIds] = useState<Record<string, boolean>>({});
   const [guidanceModalData, setGuidanceModalData] = useState<{ title: string; desc: string } | null>(null);
+
+  // Read / Unread State in localStorage
+  const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(READ_ALERTS_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Cleared Proactive Alerts in localStorage
+  const [clearedProactiveIds, setClearedProactiveIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(CLEARED_PROACTIVE_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Developer Test / Simulation Mode for Weather & Crowd
+  const [simulateWeatherHazard, setSimulateWeatherHazard] = useState(false);
+  const [simulateCrowdSurge, setSimulateCrowdSurge] = useState(false);
+
+  // Clear Alerts Confirmation Modal
+  const [clearConfirmModalOpen, setClearConfirmModalOpen] = useState(false);
+  const [isClearingAlerts, setIsClearingAlerts] = useState(false);
 
   // SOS Countdown & Confirmation State
   const [sosCountdownActive, setSosCountdownActive] = useState(false);
@@ -111,6 +145,7 @@ function AlertsModule() {
     temp: number;
     text: string;
     weatherCode: number;
+    windSpeed?: number;
   } | null>(null);
 
   useEffect(() => {
@@ -118,8 +153,8 @@ function AlertsModule() {
     async function loadWeather() {
       if (geoStatus === "denied") return;
       try {
-        const targetLat = coords?.lat ?? effective.lat;
-        const targetLng = coords?.lng ?? effective.lng;
+        const targetLat = coords?.lat ?? effective?.lat ?? 13.0827;
+        const targetLng = coords?.lng ?? effective?.lng ?? 80.2707;
         const res = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${targetLat}&longitude=${targetLng}&current_weather=true`,
           { signal: AbortSignal.timeout(5000) },
@@ -129,6 +164,7 @@ function AlertsModule() {
         if (active && data?.current_weather) {
           const temp = Math.round(data.current_weather.temperature);
           const code = data.current_weather.weathercode;
+          const windSpeed = data.current_weather.windspeed;
           let text = "Clear Sky";
           if (code === 1) text = "Mainly Clear";
           else if (code === 2) text = "Partly Cloudy";
@@ -140,30 +176,34 @@ function AlertsModule() {
           else if (code >= 80 && code <= 82) text = "Scattered Showers";
           else if (code >= 95 && code <= 99) text = "Thunderstorm";
 
-          setWeatherData({ temp, text, weatherCode: code });
+          setWeatherData({ temp, text, weatherCode: code, windSpeed });
         }
       } catch {
-        // Fallback handled gracefully
+        // Handled gracefully without throwing
       }
     }
     void loadWeather();
     return () => {
       active = false;
     };
-  }, [coords?.lat, coords?.lng, effective.lat, effective.lng, geoStatus]);
+  }, [coords?.lat, coords?.lng, effective?.lat, effective?.lng, geoStatus]);
 
   // Load user alerts from Supabase
   const { data: dbAlerts = [], isLoading: alertsLoading } = useQuery({
     queryKey: ["my-alerts", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("alerts")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      try {
+        const { data, error } = await supabase
+          .from("alerts")
+          .select("*")
+          .eq("user_id", user!.id)
+          .order("created_at", { ascending: false });
+        if (error) return [];
+        return data ?? [];
+      } catch {
+        return [];
+      }
     },
   });
 
@@ -171,9 +211,13 @@ function AlertsModule() {
   const { data: zones = [] } = useQuery({
     queryKey: ["zones"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("geofence_zones").select("*");
-      if (error) throw error;
-      return data ?? [];
+      try {
+        const { data, error } = await supabase.from("geofence_zones").select("*");
+        if (error) return [];
+        return data ?? [];
+      } catch {
+        return [];
+      }
     },
   });
 
@@ -181,16 +225,20 @@ function AlertsModule() {
   const { data: dbPoliceStations = [] } = useQuery({
     queryKey: ["police-stations"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("police_stations")
-        .select("id, name, lat, lng");
-      if (error) return [];
-      return data ?? [];
+      try {
+        const { data, error } = await supabase
+          .from("police_stations")
+          .select("id, name, lat, lng");
+        if (error) return [];
+        return data ?? [];
+      } catch {
+        return [];
+      }
     },
   });
 
   const allPoliceStations = useMemo(() => {
-    if (dbPoliceStations.length === 0) return COMPREHENSIVE_POLICE_STATIONS;
+    if (!dbPoliceStations || dbPoliceStations.length === 0) return COMPREHENSIVE_POLICE_STATIONS;
     const existingIds = new Set(dbPoliceStations.map((s) => s.id));
     const merged = [...dbPoliceStations];
     for (const st of COMPREHENSIVE_POLICE_STATIONS) {
@@ -203,9 +251,8 @@ function AlertsModule() {
 
   // Nearest police station calculation
   const nearestPolice = useMemo(() => {
-    if (geoStatus === "denied" || allPoliceStations.length === 0) return null;
-    const targetLoc = coords ?? effective;
-    if (!targetLoc) return null;
+    if (geoStatus === "denied" || !allPoliceStations || allPoliceStations.length === 0) return null;
+    const targetLoc = coords ?? effective ?? { lat: 13.0827, lng: 80.2707 };
 
     let best = allPoliceStations[0]!;
     let bestDist = distanceMeters(targetLoc, { lat: best.lat, lng: best.lng });
@@ -221,36 +268,41 @@ function AlertsModule() {
 
   // Real-time Postgres subscription to alerts table
   useEffect(() => {
-    const channel = supabase
-      .channel("tourist-alerts-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "alerts" },
-        (payload) => {
-          void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
-          void queryClient.invalidateQueries({ queryKey: ["unread-alerts-count"] });
+    try {
+      const channel = supabase
+        .channel("tourist-alerts-live")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "alerts" },
+          (payload) => {
+            void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
+            void queryClient.invalidateQueries({ queryKey: ["unread-alerts-count"] });
 
-          if (payload.eventType === "UPDATE" && payload.new) {
-            const updated = payload.new as { status?: string; type?: string };
-            if (updated.status === "acknowledged") {
-              toast.info("Control Room has acknowledged your alert");
-            } else if (updated.status === "dispatched") {
-              toast.success("Police emergency response unit has been dispatched to your GPS location");
-            } else if (updated.status === "resolved") {
-              toast.success("Incident has been marked resolved");
+            if (payload.eventType === "UPDATE" && payload.new) {
+              const updated = payload.new as { status?: string; type?: string };
+              if (updated.status === "acknowledged") {
+                toast.info("Control Room has acknowledged your alert");
+              } else if (updated.status === "dispatched") {
+                toast.success("Police emergency response unit has been dispatched to your live coordinates");
+              } else if (updated.status === "resolved") {
+                toast.success("Incident has been marked resolved");
+              }
             }
-          }
-        },
-      )
-      .subscribe();
+          },
+        )
+        .subscribe();
 
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    } catch {
+      // Ignore channel errors gracefully
+    }
   }, [queryClient]);
 
   // Active SOS Incident (latest non-resolved SOS)
   const activeSosIncident = useMemo(() => {
+    if (!dbAlerts) return null;
     return dbAlerts.find(
       (a) => a.type === "sos" && (a.status === "active" || a.status === "acknowledged" || a.status === "dispatched"),
     );
@@ -258,15 +310,103 @@ function AlertsModule() {
 
   // Current Geofence Zone evaluation
   const currentZone = useMemo(() => {
-    const loc = coords ?? effective;
+    const loc = coords ?? effective ?? { lat: 13.0827, lng: 80.2707 };
     return zones.find((z) => inZone(loc, z));
   }, [zones, coords, effective]);
 
+  // =========================================================================
+  // READ / UNREAD LOGIC
+  // =========================================================================
+  const markAlertAsRead = useCallback((alertId: string) => {
+    setReadAlertIds((prev) => {
+      if (prev.has(alertId)) return prev;
+      const next = new Set(prev);
+      next.add(alertId);
+      try {
+        localStorage.setItem(READ_ALERTS_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        // localStorage fallback
+      }
+      return next;
+    });
+  }, []);
+
+  const markAllAsRead = useCallback(() => {
+    setReadAlertIds((prev) => {
+      const next = new Set(prev);
+      dbAlerts.forEach((a) => next.add(a.id));
+      try {
+        localStorage.setItem(READ_ALERTS_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        // localStorage fallback
+      }
+      return next;
+    });
+    toast.success("All alerts marked as read");
+  }, [dbAlerts]);
+
+  // =========================================================================
+  // CLEAR ALERTS HANDLER (PRESERVES ACTIVE SOS)
+  // =========================================================================
+  const handleConfirmClearAlerts = async () => {
+    if (!user) {
+      setClearConfirmModalOpen(false);
+      return;
+    }
+    setIsClearingAlerts(true);
+
+    try {
+      // 1. Delete all non-SOS alerts for this user from database
+      const { error: delError } = await supabase
+        .from("alerts")
+        .delete()
+        .eq("user_id", user.id)
+        .neq("type", "sos");
+
+      // 2. Also delete resolved or cancelled SOS alerts (keeping ONLY active/dispatched SOS)
+      await supabase
+        .from("alerts")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("type", "sos")
+        .in("status", ["resolved", "cancelled"]);
+
+      // 3. Clear proactive alerts in local state
+      setClearedProactiveIds((prev) => {
+        const next = new Set(prev);
+        // add current proactive ids
+        try {
+          localStorage.setItem(CLEARED_PROACTIVE_KEY, JSON.stringify(Array.from(next)));
+        } catch {
+          // localStorage fallback
+        }
+        return next;
+      });
+
+      if (delError) {
+        toast.error(`Clear failed: ${delError.message}`);
+      } else {
+        toast.success("Safety alert history cleared");
+      }
+
+      void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
+      void queryClient.invalidateQueries({ queryKey: ["unread-alerts-count"] });
+    } catch {
+      toast.error("Failed to clear alerts");
+    } finally {
+      setIsClearingAlerts(false);
+      setClearConfirmModalOpen(false);
+    }
+  };
+
+  // =========================================================================
+  // SOS DISPATCH & COUNTDOWN HANDLER
+  // =========================================================================
   const executeSosDispatch = useCallback(async () => {
     if (!user) return;
     setIsTriggeringSos(true);
 
-    const targetLoc = coords ?? effective;
+    const targetLoc = coords ?? effective ?? { lat: 13.0827, lng: 80.2707 };
     const locName = locationTitle !== "Detecting your location..." ? locationTitle : "Live GPS Coordinate";
 
     const { error } = await supabase.from("alerts").insert({
@@ -292,9 +432,7 @@ function AlertsModule() {
     void queryClient.invalidateQueries({ queryKey: ["unread-alerts-count"] });
   }, [user, coords, effective, locationTitle, currentZone, queryClient]);
 
-  // =========================================================================
-  // 3-SECOND SOS SAFELOCK COUNTDOWN ENGINE
-  // =========================================================================
+  // 3-Second Countdown Effect
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null;
     if (sosCountdownActive && sosCountdownSeconds > 0) {
@@ -349,7 +487,24 @@ function AlertsModule() {
     const now = Date.now();
 
     // 1. CrowdX High Density & Surge Alert
-    if (isCrowdLive && crowdDetectedCount !== null && crowdMatchedLocation) {
+    if (simulateCrowdSurge) {
+      list.push({
+        id: "simulated-crowd-surge",
+        type: "crowd",
+        severity: "CRITICAL",
+        title: "🚨 Crowd Surge Detected (Test Simulator)",
+        message: "Rapid increase in pedestrian congestion detected near your sector (142 people detected).",
+        whyExplanation: "Developer simulation: CrowdX YOLO vision camera reported sudden 300% influx over standard capacity baseline.",
+        locationName: crowdMatchedLocation?.name || "Marina Coastal Sector",
+        distanceMeters: 450,
+        timestamp: now,
+        recommendedAction: "Avoid entering the main gathering hub; take alternate open avenues.",
+        actionType: "map",
+        actionLabel: "View Safer Route",
+        actionUrl: "/app/map",
+        isSimulated: true,
+      });
+    } else if (isCrowdLive && crowdDetectedCount !== null && crowdMatchedLocation) {
       if (crowdDetectedCount >= 60 || crowdLevel === "Very Busy") {
         list.push({
           id: `proactive-crowd-${crowdMatchedLocation.id}`,
@@ -366,7 +521,7 @@ function AlertsModule() {
           actionLabel: "View Crowd Zone on Map",
           actionUrl: "/app/map",
         });
-      } else if (crowdDetectedCount >= 25 || crowdLevel === "Busy") {
+      } else if (crowdDetectedCount >= 20 || crowdLevel === "Busy") {
         list.push({
           id: `proactive-crowd-${crowdMatchedLocation.id}`,
           type: "crowd",
@@ -419,21 +574,70 @@ function AlertsModule() {
       }
     }
 
-    // 3. Severe Weather Hazard Warning
-    if (weatherData) {
-      if (weatherData.weatherCode >= 95 || weatherData.weatherCode === 65 || weatherData.weatherCode === 82) {
+    // 3. Severe Weather Hazard Warning (Thunderstorm, Rain, Heat, or Simulator)
+    if (simulateWeatherHazard) {
+      list.push({
+        id: "simulated-weather-hazard",
+        type: "weather",
+        severity: "WARNING",
+        title: "🌧️ Heavy Rain & Flash Storm Alert (Test Simulator)",
+        message: "Severe convective storm with heavy rainfall (42 mm/h) and localized waterlogging detected in your GPS grid.",
+        whyExplanation: "Developer simulation: Open-Meteo test threshold triggered for severe convective precipitation.",
+        locationName: cityArea || "Chennai North / Coastal Sector",
+        timestamp: now,
+        recommendedAction: "Seek covered shelter; avoid waterlogged underpasses and coastal breakwaters.",
+        actionType: "guidance",
+        actionLabel: "Storm Safety Tips",
+        isSimulated: true,
+      });
+    } else if (weatherData) {
+      if (weatherData.weatherCode >= 95) {
         list.push({
           id: "proactive-weather-storm",
           type: "weather",
-          severity: "WARNING",
-          title: `Severe Weather Warning: ${weatherData.text}`,
-          message: `Active thunderstorm and heavy precipitation detected at your coordinates (${weatherData.temp}°C).`,
-          whyExplanation: `Live meteorological radar reports active severe convective precipitation impacting your GPS grid.`,
+          severity: "CRITICAL",
+          title: `⛈️ Severe Thunderstorm Warning: ${weatherData.text}`,
+          message: `Active thunderstorm and lightning activity detected in your area (${weatherData.temp}°C).`,
+          whyExplanation: `Live Open-Meteo meteorological radar reports thunderstorm conditions (Code ${weatherData.weatherCode}) impacting your GPS grid.`,
           locationName: cityArea || "Current Area",
           timestamp: now,
-          recommendedAction: "Seek covered shelter immediately; avoid standing beneath tall trees or near coastal breakwaters.",
+          recommendedAction: "Seek indoor shelter immediately; stay away from open waters, metal structures, and tall trees.",
           actionType: "guidance",
-          actionLabel: "Storm Safety Tips",
+          actionLabel: "Storm Precautions",
+        });
+      } else if (
+        weatherData.weatherCode === 65 ||
+        weatherData.weatherCode === 82 ||
+        weatherData.weatherCode === 63 ||
+        weatherData.weatherCode === 81
+      ) {
+        list.push({
+          id: "proactive-weather-rain",
+          type: "weather",
+          severity: "WARNING",
+          title: `🌧️ Heavy Rain & Wet Road Warning: ${weatherData.text}`,
+          message: `Heavy rainfall affecting your area (${weatherData.temp}°C). Road visibility and traction reduced.`,
+          whyExplanation: `Live meteorological station reports continuous heavy rainfall at your coordinates.`,
+          locationName: cityArea || "Current Area",
+          timestamp: now,
+          recommendedAction: "Exercise caution while driving or walking near waterlogged zones.",
+          actionType: "map",
+          actionLabel: "View Weather Map",
+          actionUrl: "/app/map",
+        });
+      } else if (weatherData.temp >= 36) {
+        list.push({
+          id: "proactive-weather-heat",
+          type: "weather",
+          severity: "CAUTION",
+          title: `☀️ High Heat Advisory: ${weatherData.temp}°C`,
+          message: `High ambient temperature recorded in your area. Elevated risk of dehydration.`,
+          whyExplanation: `Live sensor reports temperature exceeding 36°C in your current locality.`,
+          locationName: cityArea || "Current Area",
+          timestamp: now,
+          recommendedAction: "Stay well-hydrated, wear sun protection, and avoid prolonged midday sun exposure.",
+          actionType: "guidance",
+          actionLabel: "Heat Safety Tips",
         });
       }
     }
@@ -446,9 +650,9 @@ function AlertsModule() {
         id: "proactive-night-safety",
         type: "night",
         severity: "CAUTION",
-        title: "Nighttime Travel Advisory",
+        title: "🌙 Nighttime Travel Advisory",
         message: `It is after dark with limited immediate police post coverage (${(nearestPolice.distanceMeters / 1000).toFixed(1)} km to ${nearestPolice.station.name}).`,
-        whyExplanation: `Night safety heuristic computed based on local hour (${format(new Date(), "h:mm a")}) and distance to nearest verified police unit.`,
+        whyExplanation: `Night safety heuristic computed based on local hour (${format(new Date(), "h:mm a")}) and distance to nearest verified police station.`,
         locationName: locationTitle !== "Detecting your location..." ? locationTitle : "Current Sector",
         distanceMeters: nearestPolice.distanceMeters,
         timestamp: now,
@@ -460,6 +664,8 @@ function AlertsModule() {
 
     return list;
   }, [
+    simulateCrowdSurge,
+    simulateWeatherHazard,
     isCrowdLive,
     crowdDetectedCount,
     crowdLevel,
@@ -474,11 +680,20 @@ function AlertsModule() {
 
   // Combined counts & filters
   const unreadCount = useMemo(() => {
-    const activeDbCount = dbAlerts.filter((a) => a.status === "active").length;
-    return activeDbCount + proactiveAlerts.length;
-  }, [dbAlerts, proactiveAlerts]);
+    let count = 0;
+    // Count unread proactive alerts
+    proactiveAlerts.forEach((a) => {
+      if (!readAlertIds.has(a.id)) count++;
+    });
+    // Count unread active DB alerts
+    dbAlerts.forEach((a) => {
+      if (a.status === "active" && !readAlertIds.has(a.id)) count++;
+    });
+    return count;
+  }, [proactiveAlerts, dbAlerts, readAlertIds]);
 
   const toggleWhy = (id: string) => {
+    markAlertAsRead(id);
     setExpandedWhyIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
@@ -546,30 +761,53 @@ function AlertsModule() {
             </p>
           </div>
 
-          {/* Unread Alerts Badge */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Action Header: Unread Count + Mark All Read + Clear Alerts */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Unread Alerts Badge */}
             <div className="rounded-2xl border border-[#F6B28F]/30 bg-white/90 px-4 py-2.5 shadow-sm flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF6F61]/10 text-[#FF6F61]">
                 <Bell className="h-5 w-5" />
               </div>
-              <div>
+              <div className="text-left">
                 <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D] block">
-                  Active Alerts
+                  Unread Alerts
                 </span>
                 <span className="text-base font-black text-[#1E1E1E]">
-                  {unreadCount} {unreadCount === 1 ? "Threat / Notice" : "Threats / Notices"}
+                  {unreadCount} {unreadCount === 1 ? "Notice" : "Notices"}
                 </span>
               </div>
             </div>
+
+            {/* Mark All Read Button */}
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                className="flex items-center gap-1.5 rounded-2xl bg-white border border-[#F6B28F]/40 px-3.5 py-2.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FFF8F3] transition-colors cursor-pointer shadow-xs"
+                title="Mark all as read"
+              >
+                <CheckCheck className="h-4 w-4 text-[#39B86B]" />
+                <span className="hidden sm:inline">Mark All Read</span>
+              </button>
+            )}
+
+            {/* Clear Alerts Button */}
+            <button
+              onClick={() => setClearConfirmModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-2xl bg-[#FFF5F5] border border-[#E94B5F]/30 px-3.5 py-2.5 text-xs font-bold text-[#E94B5F] hover:bg-[#FFEAEB] transition-colors cursor-pointer shadow-xs"
+              title="Clear alerts history"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Clear Alerts</span>
+            </button>
           </div>
         </div>
 
         {/* Live Safety Signals Status Row */}
         <div className="mt-6 pt-4 border-t border-[#F6B28F]/20 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
           {/* Signal 1: GPS */}
-          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20">
+          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20 text-left">
             <span
-              className={`h-2 w-2 rounded-full ${
+              className={`h-2 w-2 rounded-full shrink-0 ${
                 geoStatus === "success" ? "bg-[#39B86B] animate-ping" : "bg-[#F2A93B]"
               }`}
             />
@@ -582,9 +820,9 @@ function AlertsModule() {
           </div>
 
           {/* Signal 2: CrowdX */}
-          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20">
+          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20 text-left">
             <span
-              className={`h-2 w-2 rounded-full ${
+              className={`h-2 w-2 rounded-full shrink-0 ${
                 isCrowdLive ? "bg-[#39B86B] animate-ping" : "bg-[#77716D]"
               }`}
             />
@@ -597,29 +835,67 @@ function AlertsModule() {
           </div>
 
           {/* Signal 3: Weather Radar */}
-          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20">
+          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20 text-left">
             <span
-              className={`h-2 w-2 rounded-full ${
+              className={`h-2 w-2 rounded-full shrink-0 ${
                 weatherData ? "bg-[#39B86B]" : "bg-[#77716D]"
               }`}
             />
             <div className="min-w-0 flex-1">
               <span className="text-[9px] font-black text-[#77716D] block uppercase">Weather Feed</span>
               <span className="font-bold text-[#1E1E1E] truncate block">
-                {weatherData ? `${weatherData.temp}°C · ${weatherData.text}` : "Unavailable"}
+                {weatherData ? `${weatherData.temp}°C · ${weatherData.text}` : "Weather data unavailable"}
               </span>
             </div>
           </div>
 
           {/* Signal 4: Emergency Response Network */}
-          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20">
-            <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-pulse" />
+          <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20 text-left">
+            <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-pulse shrink-0" />
             <div className="min-w-0 flex-1">
               <span className="text-[9px] font-black text-[#77716D] block uppercase">Police Network</span>
               <span className="font-bold text-[#1E1E1E] truncate block">
                 {nearestPolice ? nearestPolice.station.name : "Active 24/7"}
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Developer Test Tools (Toggles to test Weather & Crowd alerts) */}
+        <div className="mt-3 pt-3 border-t border-dashed border-[#F6B28F]/30 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <span className="text-[#77716D] font-bold flex items-center gap-1">
+            <Zap className="h-3.5 w-3.5 text-[#F2A93B]" />
+            <span>Developer Alert Simulators:</span>
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setSimulateWeatherHazard((prev) => !prev);
+                toast.info(simulateWeatherHazard ? "Weather simulation turned off" : "Simulated Heavy Rain alert generated");
+              }}
+              className={`rounded-xl px-2.5 py-1 font-bold border transition-colors cursor-pointer ${
+                simulateWeatherHazard
+                  ? "bg-[#FF6F61] text-white border-[#FF6F61]"
+                  : "bg-white text-[#77716D] border-black/10 hover:bg-[#FFF8F3]"
+              }`}
+            >
+              {simulateWeatherHazard ? "✓ Rain Alert Active" : "🌧️ Test Rain Alert"}
+            </button>
+
+            <button
+              onClick={() => {
+                setSimulateCrowdSurge((prev) => !prev);
+                toast.info(simulateCrowdSurge ? "Crowd simulation turned off" : "Simulated Crowd Surge alert generated");
+              }}
+              className={`rounded-xl px-2.5 py-1 font-bold border transition-colors cursor-pointer ${
+                simulateCrowdSurge
+                  ? "bg-[#FF6F61] text-white border-[#FF6F61]"
+                  : "bg-white text-[#77716D] border-black/10 hover:bg-[#FFF8F3]"
+              }`}
+            >
+              {simulateCrowdSurge ? "✓ Surge Alert Active" : "👥 Test Crowd Surge"}
+            </button>
           </div>
         </div>
       </div>
@@ -645,7 +921,7 @@ function AlertsModule() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#E94B5F] text-white shadow-md shadow-[#E94B5F]/30 animate-pulse">
                     <ShieldAlert className="h-6 w-6" />
                   </div>
-                  <div>
+                  <div className="text-left">
                     <div className="flex items-center gap-2">
                       <span className="text-base sm:text-lg font-black text-[#E94B5F] tracking-wide">
                         🚨 EMERGENCY SOS ACTIVE
@@ -674,7 +950,7 @@ function AlertsModule() {
               </div>
 
               {/* Real-time Incident Lifecycle Stepper */}
-              <div className="space-y-2">
+              <div className="space-y-2 text-left">
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D]">
                   INCIDENT RESPONSE PROGRESSION
                 </span>
@@ -791,7 +1067,7 @@ function AlertsModule() {
       {/* ========================================================================= */}
       <div className="space-y-4">
         <div className="flex items-center justify-between px-1">
-          <div>
+          <div className="text-left">
             <h2 className="text-lg sm:text-xl font-black text-[#1E1E1E]">
               Proactive Safety Intelligence
             </h2>
@@ -811,11 +1087,15 @@ function AlertsModule() {
             {proactiveAlerts.map((alert) => {
               const style = getSeverityStyle(alert.severity);
               const isWhyOpen = expandedWhyIds[alert.id];
+              const isRead = readAlertIds.has(alert.id);
 
               return (
                 <div
                   key={alert.id}
-                  className={`rounded-3xl border ${style.border} ${style.bg} p-5 shadow-sm transition-all text-left bg-white/95 backdrop-blur-xs`}
+                  onClick={() => markAlertAsRead(alert.id)}
+                  className={`rounded-3xl border ${style.border} ${style.bg} p-5 shadow-sm transition-all text-left bg-white/95 backdrop-blur-xs ${
+                    isRead ? "opacity-85" : "ring-1 ring-[#FF6F61]/30 shadow-md"
+                  }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                     <div className="flex items-start gap-3">
@@ -832,6 +1112,19 @@ function AlertsModule() {
                           >
                             {alert.severity}
                           </span>
+
+                          {!isRead && (
+                            <span className="rounded-full bg-[#FF6F61] px-1.5 py-0.2 text-[8px] font-black text-white uppercase tracking-wider">
+                              NEW
+                            </span>
+                          )}
+
+                          {alert.isSimulated && (
+                            <span className="rounded-full bg-amber-500/20 text-amber-700 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider">
+                              TEST MODE
+                            </span>
+                          )}
+
                           <span className="text-xs font-bold text-[#77716D] flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
                             {alert.locationName}
@@ -853,6 +1146,7 @@ function AlertsModule() {
                       {alert.actionType === "map" && (
                         <Link
                           to={alert.actionUrl || "/app/map"}
+                          onClick={() => markAlertAsRead(alert.id)}
                           className="flex items-center gap-1.5 rounded-xl bg-[#FF6F61] px-3.5 py-2 text-xs font-black text-white shadow-xs hover:bg-[#FF8577] transition-all cursor-pointer"
                         >
                           <span>{alert.actionLabel}</span>
@@ -862,12 +1156,13 @@ function AlertsModule() {
 
                       {alert.actionType === "guidance" && (
                         <button
-                          onClick={() =>
+                          onClick={() => {
+                            markAlertAsRead(alert.id);
                             setGuidanceModalData({
                               title: alert.title,
                               desc: alert.recommendedAction,
-                            })
-                          }
+                            });
+                          }}
                           className="flex items-center gap-1.5 rounded-xl bg-[#FFF8F3] border border-[#F6B28F]/40 px-3.5 py-2 text-xs font-black text-[#1E1E1E] hover:bg-white transition-all cursor-pointer"
                         >
                           <Zap className="h-3.5 w-3.5 text-[#F2A93B]" />
@@ -878,6 +1173,7 @@ function AlertsModule() {
                       {alert.actionType === "helpline" && (
                         <a
                           href="tel:112"
+                          onClick={() => markAlertAsRead(alert.id)}
                           className="flex items-center gap-1.5 rounded-xl bg-[#39B86B] px-3.5 py-2 text-xs font-black text-white shadow-xs hover:bg-[#32A55F] transition-all"
                         >
                           <PhoneCall className="h-3.5 w-3.5" />
@@ -901,7 +1197,10 @@ function AlertsModule() {
                   {/* "Why am I seeing this?" Expandable Accordion */}
                   <div className="mt-2.5 pt-2 border-t border-black/5">
                     <button
-                      onClick={() => toggleWhy(alert.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleWhy(alert.id);
+                      }}
                       className="flex items-center gap-1 text-[11px] font-bold text-[#77716D] hover:text-[#1E1E1E] transition-colors cursor-pointer"
                     >
                       <HelpCircle className="h-3.5 w-3.5" />
@@ -979,7 +1278,7 @@ function AlertsModule() {
       {/* ========================================================================= */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
-          <div>
+          <div className="text-left">
             <h2 className="text-lg sm:text-xl font-black text-[#1E1E1E]">Incident & Alert Log</h2>
             <p className="text-xs text-[#77716D]">
               Historical chronological audit of your SOS transmissions and alerts.
@@ -1027,14 +1326,18 @@ function AlertsModule() {
               .map((alertItem) => {
                 const isSos = alertItem.type === "sos";
                 const isResolved = alertItem.status === "resolved" || alertItem.status === "cancelled";
+                const isRead = readAlertIds.has(alertItem.id);
 
                 return (
                   <div
                     key={alertItem.id}
-                    className={`rounded-2xl border p-4 text-left transition-all bg-white/95 shadow-2xs ${
+                    onClick={() => markAlertAsRead(alertItem.id)}
+                    className={`rounded-2xl border p-4 text-left transition-all bg-white/95 shadow-2xs cursor-pointer ${
                       isSos && !isResolved
                         ? "border-[#E94B5F]/40 bg-[#FFF5F5]/60"
-                        : "border-[#F6B28F]/25 hover:border-[#F6B28F]/50"
+                        : isRead
+                          ? "border-[#F6B28F]/20 opacity-80"
+                          : "border-[#F6B28F]/40 shadow-xs"
                     }`}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1064,6 +1367,10 @@ function AlertsModule() {
                             {alertItem.status}
                           </span>
 
+                          {!isRead && alertItem.status === "active" && (
+                            <span className="h-2 w-2 rounded-full bg-[#FF6F61]" />
+                          )}
+
                           <span className="text-[11px] text-[#77716D]">
                             {formatDistanceToNow(new Date(alertItem.created_at), { addSuffix: true })}
                           </span>
@@ -1081,6 +1388,10 @@ function AlertsModule() {
                             href={`https://www.google.com/maps?q=${alertItem.lat},${alertItem.lng}`}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markAlertAsRead(alertItem.id);
+                            }}
                             className="flex items-center gap-1 text-[11px] font-bold text-[#FF6F61] hover:underline"
                           >
                             <MapPin className="h-3 w-3" />
@@ -1100,7 +1411,71 @@ function AlertsModule() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 6. SOS 3-SECOND COUNTDOWN SAFEGUARD MODAL */}
+      {/* 6. CLEAR ALERTS CONFIRMATION MODAL */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {clearConfirmModalOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setClearConfirmModalOpen(false)}
+              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 15 }}
+              className="fixed inset-x-4 top-[25%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-md rounded-[32px] border border-[#F6B28F]/40 bg-white p-6 shadow-2xl space-y-4 text-left"
+            >
+              <div className="flex items-center justify-between border-b border-black/5 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E94B5F]/15 text-[#E94B5F]">
+                    <Trash2 className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-black text-[#1E1E1E]">Clear Alert History</h3>
+                    <p className="text-xs text-[#77716D]">Archive Non-Critical Alerts</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setClearConfirmModalOpen(false)}
+                  className="rounded-full p-1.5 text-[#77716D] hover:bg-black/5 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <p className="text-xs text-[#77716D] leading-relaxed">
+                Are you sure you want to clear your safety alerts? This will clear historical notices and resolved incidents.
+                <span className="block mt-1 font-bold text-[#E94B5F]">
+                  * Active Emergency SOS incidents will NOT be deleted.
+                </span>
+              </p>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={() => setClearConfirmModalOpen(false)}
+                  className="w-full rounded-2xl bg-black/5 py-2.5 text-xs font-bold text-[#1E1E1E] hover:bg-black/10 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isClearingAlerts}
+                  onClick={handleConfirmClearAlerts}
+                  className="w-full rounded-2xl bg-[#E94B5F] py-2.5 text-xs font-black text-white shadow-md shadow-[#E94B5F]/25 hover:bg-[#D4384C] transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isClearingAlerts ? "Clearing..." : "Yes, Clear Alerts"}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* 7. SOS 3-SECOND COUNTDOWN SAFEGUARD MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {sosCountdownActive && (
@@ -1131,7 +1506,7 @@ function AlertsModule() {
               <div className="rounded-2xl bg-[#FFF8F3] p-3 text-xs text-left border border-[#F6B28F]/30 space-y-1">
                 <p className="font-bold text-[#1E1E1E]">📍 Target GPS: {locationTitle}</p>
                 <p className="text-[11px] text-[#77716D]">
-                  Coordinates: {coords ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : `${effective.lat.toFixed(4)}, ${effective.lng.toFixed(4)}`}
+                  Coordinates: {coords ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : `${effective?.lat?.toFixed(4) ?? "13.0827"}, ${effective?.lng?.toFixed(4) ?? "80.2707"}`}
                 </p>
               </div>
 
@@ -1158,7 +1533,7 @@ function AlertsModule() {
       </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* 7. CANCEL SOS CONFIRMATION MODAL */}
+      {/* 8. CANCEL SOS CONFIRMATION MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {cancelModalOpen && (
@@ -1174,7 +1549,7 @@ function AlertsModule() {
               initial={{ opacity: 0, scale: 0.9, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 15 }}
-              className="fixed inset-x-4 top-[25%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-md rounded-[32px] border border-[#F6B28F]/40 bg-white p-6 shadow-2xl space-y-4"
+              className="fixed inset-x-4 top-[25%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-md rounded-[32px] border border-[#F6B28F]/40 bg-white p-6 shadow-2xl space-y-4 text-left"
             >
               <div className="flex items-center justify-between border-b border-black/5 pb-3">
                 <div className="flex items-center gap-2">
@@ -1218,7 +1593,7 @@ function AlertsModule() {
       </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* 8. GUIDANCE / SAFETY DETAILS MODAL */}
+      {/* 9. GUIDANCE / SAFETY DETAILS MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {guidanceModalData && (

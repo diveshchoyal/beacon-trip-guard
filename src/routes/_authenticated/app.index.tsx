@@ -74,7 +74,17 @@ const SAFETY_TIPS = [
 
 function TouristHome() {
   const { user, profile } = useAuth();
-  const { effective, coords, error: geoError, requestLocation } = useGeolocation();
+  const {
+    effective,
+    coords,
+    error: geoError,
+    geoStatus,
+    locationTitle,
+    locationSublabel,
+    cityArea,
+    stateCountry,
+    requestLocation,
+  } = useGeolocation();
   const queryClient = useQueryClient();
 
   // Local state
@@ -499,11 +509,19 @@ function TouristHome() {
               </p>
             </div>
 
-            {/* Prominent Current Location Card */}
+            {/* Prominent Current Location Card (Live Device GPS + Reverse Geocoded) */}
             <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 sm:p-5 shadow-[0_8px_25px_rgba(255,111,97,0.06)] backdrop-blur-md">
               <div className="flex items-center justify-between gap-2 border-b border-black/5 pb-2.5">
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D] flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      geoStatus === "success"
+                        ? "bg-[#39B86B] animate-ping"
+                        : geoStatus === "locating"
+                          ? "bg-[#F2A93B] animate-pulse"
+                          : "bg-[#77716D]"
+                    }`}
+                  />
                   CURRENT LOCATION
                 </span>
                 <span
@@ -537,25 +555,26 @@ function TouristHome() {
                   <MapPin className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm sm:text-base font-black text-[#1E1E1E]">
-                    {currentZone?.name ?? "Marina Beach, Chennai, Tamil Nadu"}
+                  <p
+                    className="truncate text-sm sm:text-base font-black text-[#1E1E1E]"
+                    title={locationTitle}
+                  >
+                    {locationTitle}
                   </p>
                   <p className="mt-0.5 text-xs text-[#77716D] truncate">
-                    {geoError
-                      ? "GPS tracking active (simulated location)"
-                      : "Location tracked live via GPS satellite"}
+                    {locationSublabel}
                   </p>
                 </div>
               </div>
 
-              {/* Location fallback button if permission not granted */}
-              {geoError && (
+              {/* Location fallback button if permission not granted or GPS signal needs refresh */}
+              {geoStatus !== "success" && (
                 <button
                   onClick={requestLocation}
                   className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-xl bg-[#FF6F61]/10 py-1.5 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-colors cursor-pointer"
                 >
                   <Radio className="h-3.5 w-3.5 animate-pulse" />
-                  <span>Enable Location</span>
+                  <span>{geoStatus === "denied" ? "Enable Location" : "Refresh GPS Signal"}</span>
                 </button>
               )}
             </div>
@@ -605,16 +624,31 @@ function TouristHome() {
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D]">
                   YOUR LOCATION
                 </span>
-                <span className="flex items-center gap-1 text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
-                  <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
-                  LIVE
-                </span>
+                {geoStatus === "success" ? (
+                  <span className="flex items-center gap-1 text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
+                    <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
+                    LIVE
+                  </span>
+                ) : geoStatus === "locating" ? (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-[#F2A93B] uppercase tracking-wider">
+                    <span className="h-2 w-2 rounded-full bg-[#F2A93B] animate-pulse" />
+                    DETECTING
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold text-[#77716D] uppercase tracking-wider">
+                    OFFLINE
+                  </span>
+                )}
               </div>
 
               {/* Geographic Details */}
               <div className="space-y-1 text-left">
-                <p className="text-base font-black text-[#1E1E1E]">Chennai</p>
-                <p className="text-xs font-bold text-[#77716D]">Tamil Nadu, India</p>
+                <p className="text-base font-black text-[#1E1E1E] truncate" title={cityArea}>
+                  {cityArea}
+                </p>
+                <p className="text-xs font-bold text-[#77716D] truncate" title={stateCountry}>
+                  {stateCountry}
+                </p>
               </div>
 
               {/* Live Coordinates */}
@@ -624,7 +658,11 @@ function TouristHome() {
                     Latitude
                   </span>
                   <span className="font-mono font-bold text-[#1E1E1E]">
-                    {effective.lat ? effective.lat.toFixed(4) : "13.0827"}° N
+                    {coords
+                      ? `${coords.lat.toFixed(4)}° N`
+                      : effective.lat
+                        ? `${effective.lat.toFixed(4)}° N`
+                        : "—"}
                   </span>
                 </div>
                 <div>
@@ -632,7 +670,11 @@ function TouristHome() {
                     Longitude
                   </span>
                   <span className="font-mono font-bold text-[#1E1E1E]">
-                    {effective.lng ? effective.lng.toFixed(4) : "80.2707"}° E
+                    {coords
+                      ? `${coords.lng.toFixed(4)}° E`
+                      : effective.lng
+                        ? `${effective.lng.toFixed(4)}° E`
+                        : "—"}
                   </span>
                 </div>
               </div>

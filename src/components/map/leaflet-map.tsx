@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -24,7 +24,7 @@ const pinColor: Record<Pin["tone"], string> = {
 /** Live tourist user location marker (pulsing blue dot) */
 function makeUserLocationIcon() {
   return L.divIcon({
-    className: "",
+    className: "beacon-user-location-div-icon",
     html: `
       <div class="user-location-marker">
         <div class="user-location-pulse"></div>
@@ -40,7 +40,7 @@ function makeUserLocationIcon() {
 /** Distinct pin icon for tourist places colored by active dynamic safety status */
 function makePlaceIcon(safetyColor: string) {
   return L.divIcon({
-    className: "",
+    className: "beacon-place-pin-div-icon",
     html: `
       <div class="place-pin-marker" style="width: 32px; height: 38px;">
         <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -61,12 +61,43 @@ function makeStandardIcon(tone: Pin["tone"]) {
   if (tone === "self") return makeUserLocationIcon();
   const size = tone === "alert" ? 20 : 16;
   return L.divIcon({
-    className: "",
+    className: "beacon-standard-div-icon",
     html: `<div class="beacon-pin" style="width:${size}px;height:${size}px;background:${pinColor[tone]}"></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
   });
+}
+
+/** Ensures Leaflet correctly invalidates container size and sets initial view cleanly without world zoom */
+function MapInitializer({
+  center,
+  zoom,
+}: {
+  center: [number, number];
+  zoom: number;
+}) {
+  const map = useMap();
+  const hasInitialized = useRef(false);
+
+  useEffect(() => {
+    // Invalidate container size to prevent grey tiles and world-zoom bug in flex containers
+    map.invalidateSize();
+    const t1 = setTimeout(() => map.invalidateSize(), 150);
+    const t2 = setTimeout(() => map.invalidateSize(), 400);
+
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      map.setView(center, zoom, { animate: false });
+    }
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [map, center, zoom]);
+
+  return null;
 }
 
 /** Recenter floating glass button */
@@ -99,7 +130,7 @@ export default function LeafletMap({
   pins = [],
   places = [],
   center,
-  zoom = 8,
+  zoom = 7,
   currentTime = new Date(),
   selectedStatus = null,
 }: {
@@ -155,6 +186,7 @@ export default function LeafletMap({
       className="h-full w-full"
       style={{ height: "100%", width: "100%" }}
     >
+      <MapInitializer center={center} zoom={zoom} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"

@@ -22,6 +22,10 @@ import {
   type SafetyStatus,
 } from "@/components/map/places-data";
 
+/** Tamil Nadu geographical centre for optimal statewide overview on load */
+const TAMIL_NADU_CENTER: [number, number] = [10.85, 78.7];
+const TAMIL_NADU_INITIAL_ZOOM = 7;
+
 export const Route = createFileRoute("/_authenticated/app/map")({
   component: TouristMap,
 });
@@ -133,8 +137,8 @@ function TouristMap() {
           <BeaconMap
             zones={[]} // Old static geofence zone circles removed in favor of dynamic landmark safety pins
             places={TAMIL_NADU_TOURIST_PLACES}
-            center={[effective.lat, effective.lng]}
-            zoom={8}
+            center={TAMIL_NADU_CENTER}
+            zoom={TAMIL_NADU_INITIAL_ZOOM}
             currentTime={effectiveTime}
             selectedStatus={selectedFilter}
             pins={[

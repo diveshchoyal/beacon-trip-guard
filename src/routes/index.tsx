@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ShieldCheck, MapPin, Fingerprint } from "lucide-react";
 
 import logo from "@/assets/beacon-logo.png";
 import { GlassCard, PressButton } from "@/components/ui/glass";

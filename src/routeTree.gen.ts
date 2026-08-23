@@ -20,6 +20,7 @@ import { Route as AuthenticatedAppAlertsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAppIdRouteImport } from './routes/_authenticated/app.id'
 import { Route as AuthenticatedAppMapRouteImport } from './routes/_authenticated/app.map'
 import { Route as AuthenticatedAppProfileRouteImport } from './routes/_authenticated/app.profile'
+import { Route as AuthenticatedAppTranslateRouteImport } from './routes/_authenticated/app.translate'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard.index'
 import { Route as AuthenticatedDashboardAlertsRouteImport } from './routes/_authenticated/dashboard.alerts'
 import { Route as AuthenticatedDashboardEfirRouteImport } from './routes/_authenticated/dashboard.efir'
@@ -79,6 +80,12 @@ const AuthenticatedAppProfileRoute = AuthenticatedAppProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppTranslateRoute =
+  AuthenticatedAppTranslateRouteImport.update({
+    id: '/translate',
+    path: '/translate',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedDashboardIndexRoute =
   AuthenticatedDashboardIndexRouteImport.update({
     id: '/',
@@ -114,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/app/id': typeof AuthenticatedAppIdRoute
   '/app/map': typeof AuthenticatedAppMapRoute
   '/app/profile': typeof AuthenticatedAppProfileRoute
+  '/app/translate': typeof AuthenticatedAppTranslateRoute
   '/dashboard/alerts': typeof AuthenticatedDashboardAlertsRoute
   '/dashboard/efir': typeof AuthenticatedDashboardEfirRoute
   '/dashboard/registry': typeof AuthenticatedDashboardRegistryRoute
@@ -128,6 +136,7 @@ export interface FileRoutesByTo {
   '/app/id': typeof AuthenticatedAppIdRoute
   '/app/map': typeof AuthenticatedAppMapRoute
   '/app/profile': typeof AuthenticatedAppProfileRoute
+  '/app/translate': typeof AuthenticatedAppTranslateRoute
   '/dashboard/alerts': typeof AuthenticatedDashboardAlertsRoute
   '/dashboard/efir': typeof AuthenticatedDashboardEfirRoute
   '/dashboard/registry': typeof AuthenticatedDashboardRegistryRoute
@@ -146,6 +155,7 @@ export interface FileRoutesById {
   '/_authenticated/app/id': typeof AuthenticatedAppIdRoute
   '/_authenticated/app/map': typeof AuthenticatedAppMapRoute
   '/_authenticated/app/profile': typeof AuthenticatedAppProfileRoute
+  '/_authenticated/app/translate': typeof AuthenticatedAppTranslateRoute
   '/_authenticated/dashboard/alerts': typeof AuthenticatedDashboardAlertsRoute
   '/_authenticated/dashboard/efir': typeof AuthenticatedDashboardEfirRoute
   '/_authenticated/dashboard/registry': typeof AuthenticatedDashboardRegistryRoute
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/app/id'
     | '/app/map'
     | '/app/profile'
+    | '/app/translate'
     | '/dashboard/alerts'
     | '/dashboard/efir'
     | '/dashboard/registry'
@@ -178,6 +189,7 @@ export interface FileRouteTypes {
     | '/app/id'
     | '/app/map'
     | '/app/profile'
+    | '/app/translate'
     | '/dashboard/alerts'
     | '/dashboard/efir'
     | '/dashboard/registry'
@@ -195,6 +207,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/id'
     | '/_authenticated/app/map'
     | '/_authenticated/app/profile'
+    | '/_authenticated/app/translate'
     | '/_authenticated/dashboard/alerts'
     | '/_authenticated/dashboard/efir'
     | '/_authenticated/dashboard/registry'
@@ -288,6 +301,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppProfileRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/translate': {
+      id: '/_authenticated/app/translate'
+      path: '/translate'
+      fullPath: '/app/translate'
+      preLoaderRoute: typeof AuthenticatedAppTranslateRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/dashboard/': {
       id: '/_authenticated/dashboard/'
       path: '/'
@@ -324,6 +344,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppIdRoute: typeof AuthenticatedAppIdRoute
   AuthenticatedAppMapRoute: typeof AuthenticatedAppMapRoute
   AuthenticatedAppProfileRoute: typeof AuthenticatedAppProfileRoute
+  AuthenticatedAppTranslateRoute: typeof AuthenticatedAppTranslateRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
 }
 
@@ -332,6 +353,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppIdRoute: AuthenticatedAppIdRoute,
   AuthenticatedAppMapRoute: AuthenticatedAppMapRoute,
   AuthenticatedAppProfileRoute: AuthenticatedAppProfileRoute,
+  AuthenticatedAppTranslateRoute: AuthenticatedAppTranslateRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
 }
 

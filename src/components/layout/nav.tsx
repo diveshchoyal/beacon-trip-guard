@@ -6,6 +6,7 @@ import {
   FileText,
   Fingerprint,
   Home,
+  Languages,
   LogOut,
   Map,
   Menu,
@@ -29,6 +30,7 @@ export type NavLink = {
 export const touristLinks: NavLink[] = [
   { to: "/app", label: "Home", icon: Home, exact: true },
   { to: "/app/map", label: "Map", icon: Map },
+  { to: "/app/translate", label: "Translate", icon: Languages },
   { to: "/app/id", label: "Digital ID", icon: Fingerprint },
   { to: "/app/alerts", label: "Alerts", icon: AlertTriangle },
   { to: "/app/profile", label: "Profile", icon: UserRound },

@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
+import { Languages } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -160,6 +161,13 @@ function DashboardAlerts() {
             <PressButton className="h-10 px-4 text-xs" onClick={() => fileEfir(a)}>
               File E-FIR
             </PressButton>
+            <Link
+              to="/app/translate"
+              className="flex h-10 items-center justify-center gap-1.5 rounded-2xl glass px-3.5 text-xs font-semibold text-foreground hover:bg-white/60 transition-colors cursor-pointer border border-white/60"
+            >
+              <Languages className="h-3.5 w-3.5 text-primary" />
+              Translate
+            </Link>
           </div>
         </GlassCard>
       ))}

@@ -316,8 +316,10 @@ function VoiceTranslatorScreen() {
       if (typeof window === "undefined") return;
 
       const speechConstructor =
-        (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition ||
-        (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition;
+        (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike })
+          .SpeechRecognition ||
+        (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike })
+          .webkitSpeechRecognition;
 
       if (!speechConstructor) {
         toast.error("Voice input is not supported in this browser. Please type below.");
@@ -392,7 +394,9 @@ function VoiceTranslatorScreen() {
           console.warn("Speech recognition error:", event.error);
           if (event.error === "not-allowed" || event.error === "service-not-allowed") {
             setMicPermissionDenied(true);
-            toast.error("Microphone permission was denied. Please allow microphone access in site settings.");
+            toast.error(
+              "Microphone permission was denied. Please allow microphone access in site settings.",
+            );
           } else if (event.error !== "no-speech") {
             toast.error(`Microphone notice: ${event.error}`);
           }
@@ -491,7 +495,8 @@ function VoiceTranslatorScreen() {
     const hasTargetVoice = isTourist ? hasTouristVoice : hasOfficerVoice;
     const isCurrentActive = activeSpeaker === role;
     const isCurrentTranslating = isTranslating === role;
-    const isThisPlaying = isPlayingAudio === `${role}-translated` || isPlayingAudio?.startsWith(role);
+    const isThisPlaying =
+      isPlayingAudio === `${role}-translated` || isPlayingAudio?.startsWith(role);
 
     return (
       <GlassCard
@@ -571,7 +576,9 @@ function VoiceTranslatorScreen() {
                     </div>
                   ) : hasTargetVoice ? (
                     <button
-                      onClick={() => void speakText(translatedText, currentLang, `${role}-translated`)}
+                      onClick={() =>
+                        void speakText(translatedText, currentLang, `${role}-translated`)
+                      }
                       className="flex items-center gap-1 rounded-lg bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-foreground hover:bg-white shadow-xs cursor-pointer border border-white/70"
                       title={`Play ${config.name} voice audio`}
                     >
@@ -634,7 +641,8 @@ function VoiceTranslatorScreen() {
                   </span>{" "}
                   — showing text only.
                   <span className="text-amber-900/80 block mt-0.5 text-[10px]">
-                    You can add a {config.name} voice in your device's language / accessibility settings.
+                    You can add a {config.name} voice in your device's language / accessibility
+                    settings.
                   </span>
                 </div>
               </motion.div>
@@ -841,7 +849,9 @@ function VoiceTranslatorScreen() {
                 Voice input isn't supported in this browser.
               </p>
               <p className="text-amber-900/80 mt-0.5">
-                Please use Chrome on Android for live microphone recognition, or type your message in the text box below. Audio translation will still play aloud automatically where voices are installed.
+                Please use Chrome on Android for live microphone recognition, or type your message
+                in the text box below. Audio translation will still play aloud automatically where
+                voices are installed.
               </p>
             </div>
           </div>
@@ -854,7 +864,8 @@ function VoiceTranslatorScreen() {
             <div>
               <p className="font-semibold">Microphone permission is blocked</p>
               <p className="text-rose-900/80 mt-0.5">
-                Please allow microphone access in your browser site permissions to speak. You can still type in the text box below to translate.
+                Please allow microphone access in your browser site permissions to speak. You can
+                still type in the text box below to translate.
               </p>
             </div>
           </div>

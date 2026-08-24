@@ -17,9 +17,4 @@ export type Pin = {
   tone: "self" | "tourist" | "alert" | "place";
 };
 
-export type {
-  TouristPlace,
-  TimeRule,
-  SafetyStatus,
-  PlaceSafetyEvaluation,
-} from "./places-data";
+export type { TouristPlace, TimeRule, SafetyStatus, PlaceSafetyEvaluation } from "./places-data";

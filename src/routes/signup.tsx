@@ -91,7 +91,12 @@ function SignupPage() {
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-5">
-            <Field label="Full name" value={fullName} onChange={setFullName} placeholder="Asha Rao" />
+            <Field
+              label="Full name"
+              value={fullName}
+              onChange={setFullName}
+              placeholder="Asha Rao"
+            />
             <Field
               label="Email"
               type="email"

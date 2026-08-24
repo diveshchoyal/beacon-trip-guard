@@ -103,7 +103,6 @@
   --sidebar-ring: oklch(0.72 0.072 78);
 }
 
-
 @layer base {
   * {
     border-color: var(--color-border);
@@ -246,7 +245,9 @@
   border-radius: 9999px;
   background-color: #2563eb;
   border: 2.5px solid #ffffff;
-  box-shadow: 0 0 12px rgba(37, 99, 235, 0.8), 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 0 12px rgba(37, 99, 235, 0.8),
+    0 2px 4px rgba(0, 0, 0, 0.2);
   z-index: 2;
 }
 

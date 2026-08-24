@@ -90,7 +90,12 @@ function LiveMap() {
 
       <GlassCard className="overflow-hidden p-0">
         <div className="h-[65vh] min-h-[420px] w-full">
-          <BeaconMap zones={zones} pins={[...touristPins, ...alertPins]} center={center} zoom={12} />
+          <BeaconMap
+            zones={zones}
+            pins={[...touristPins, ...alertPins]}
+            center={center}
+            zoom={12}
+          />
         </div>
       </GlassCard>
     </div>

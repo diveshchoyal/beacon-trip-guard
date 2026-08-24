@@ -62,8 +62,7 @@ function DashboardAlerts() {
     return { name: best.name, km: bestD / 1000 };
   };
 
-  const nameFor = (id: string) =>
-    profiles.find((p) => p.id === id)?.full_name || "Unnamed tourist";
+  const nameFor = (id: string) => profiles.find((p) => p.id === id)?.full_name || "Unnamed tourist";
 
   useEffect(() => {
     const channel = supabase

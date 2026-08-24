@@ -124,11 +124,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          {/* Required: nested routes render here. */}
-          <Outlet />
-          <Toaster position="top-center" />
-        </AuthProvider>
+      <AuthProvider>
+        {/* Required: nested routes render here. */}
+        <Outlet />
+        <Toaster position="top-center" />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

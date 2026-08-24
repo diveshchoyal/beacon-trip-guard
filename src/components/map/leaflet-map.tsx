@@ -1,13 +1,5 @@
 import { useMemo, useEffect, useRef } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Circle,
-  Marker,
-  Popup,
-  Tooltip,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, TileLayer, Circle, Marker, Popup, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import { MapPin, Navigation, LocateFixed } from "lucide-react";
 
@@ -70,13 +62,7 @@ function makeStandardIcon(tone: Pin["tone"]) {
 }
 
 /** Ensures Leaflet correctly invalidates container size and sets initial view cleanly without world zoom */
-function MapInitializer({
-  center,
-  zoom,
-}: {
-  center: [number, number];
-  zoom: number;
-}) {
+function MapInitializer({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
   const hasInitialized = useRef(false);
 
@@ -107,10 +93,7 @@ function RecenterButton({ userLocation }: { userLocation?: [number, number] }) {
   if (!userLocation) return null;
 
   return (
-    <div
-      className="pointer-events-auto absolute bottom-5 right-5 z-[400]"
-      style={{ zIndex: 400 }}
-    >
+    <div className="pointer-events-auto absolute bottom-5 right-5 z-[400]" style={{ zIndex: 400 }}>
       <button
         onClick={() => {
           map.flyTo(userLocation, 13, { duration: 1.2, easeLinearity: 0.25 });
@@ -243,9 +226,7 @@ export default function LeafletMap({
               {/* Content Body */}
               <div className="p-3.5 space-y-2.5">
                 <div>
-                  <h3 className="text-base font-bold text-foreground leading-snug">
-                    {place.name}
-                  </h3>
+                  <h3 className="text-base font-bold text-foreground leading-snug">{place.name}</h3>
                   <p className="text-[12px] text-muted-foreground line-clamp-2 mt-0.5">
                     {place.shortDescription}
                   </p>
@@ -298,11 +279,7 @@ export default function LeafletMap({
 
       {/* User and other telemetry pins */}
       {pins.map((pin) => (
-        <Marker
-          key={pin.id}
-          position={[pin.lat, pin.lng]}
-          icon={standardIcons[pin.tone]}
-        >
+        <Marker key={pin.id} position={[pin.lat, pin.lng]} icon={standardIcons[pin.tone]}>
           <Popup autoPanPadding={[20, 20]}>
             <div className="p-1">
               <strong className="text-sm font-semibold">{pin.label}</strong>

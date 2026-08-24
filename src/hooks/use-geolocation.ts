@@ -34,7 +34,8 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
     if (res.ok) {
       const data = await res.json();
       const addr = data?.address || {};
-      const road = addr.road || addr.pedestrian || addr.street || addr.path || addr.footway || addr.lane;
+      const road =
+        addr.road || addr.pedestrian || addr.street || addr.path || addr.footway || addr.lane;
       const suburbRaw =
         addr.suburb ||
         addr.neighbourhood ||
@@ -42,7 +43,8 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
         addr.city_district ||
         addr.subdistrict ||
         addr.quarter;
-      const cityRaw = addr.city || addr.town || addr.municipality || addr.county || addr.state_district;
+      const cityRaw =
+        addr.city || addr.town || addr.municipality || addr.county || addr.state_district;
       const state = addr.state || "Tamil Nadu";
       const country = addr.country || "India";
 

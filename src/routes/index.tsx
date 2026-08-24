@@ -28,7 +28,9 @@ function Landing() {
   return (
     <main className="relative min-h-screen overflow-hidden px-5 py-6">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
-        <span className="text-sm font-semibold tracking-[0.35em] text-muted-foreground">BEACON</span>
+        <span className="text-sm font-semibold tracking-[0.35em] text-muted-foreground">
+          BEACON
+        </span>
       </div>
 
       <div className="mx-auto mt-12 flex w-full max-w-3xl items-center justify-center lg:mt-24">

@@ -203,7 +203,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Santhome Cathedral Basilica",
     category: "Heritage",
     region: "Chennai",
-    shortDescription: "Neo-Gothic 16th-century cathedral built over the tomb of St. Thomas the Apostle.",
+    shortDescription:
+      "Neo-Gothic 16th-century cathedral built over the tomb of St. Thomas the Apostle.",
     address: "38, Santhome High Road, Mylapore, Chennai, Tamil Nadu 600004",
     imageUrl:
       "https://images.unsplash.com/photo-1548625361-16eb477e3c15?auto=format&fit=crop&w=700&q=80",
@@ -240,7 +241,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Guindy National Park",
     category: "Nature & Wildlife",
     region: "Chennai",
-    shortDescription: "Protected urban national park featuring spotted deer, blackbucks, and nature trails.",
+    shortDescription:
+      "Protected urban national park featuring spotted deer, blackbucks, and nature trails.",
     address: "Rangeguindy, Chennai, Tamil Nadu 600025",
     imageUrl:
       "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=700&q=80",
@@ -277,7 +279,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Shore Temple",
     category: "Heritage",
     region: "Mahabalipuram",
-    shortDescription: "8th-century monolithic rock-cut Pallava sanctuary overlooking the Bay of Bengal.",
+    shortDescription:
+      "8th-century monolithic rock-cut Pallava sanctuary overlooking the Bay of Bengal.",
     address: "Shore Temple Rd, Mahabalipuram, Tamil Nadu 603104",
     imageUrl:
       "https://images.unsplash.com/photo-1621847468516-1ed5d0df56fe?auto=format&fit=crop&w=700&q=80",
@@ -314,7 +317,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Meenakshi Amman Temple",
     category: "Temple",
     region: "Madurai",
-    shortDescription: "Historic 14-tower temple complex dedicated to Goddess Meenakshi and Lord Sundareswarar.",
+    shortDescription:
+      "Historic 14-tower temple complex dedicated to Goddess Meenakshi and Lord Sundareswarar.",
     address: "Madurai Main, Madurai, Tamil Nadu 625001",
     imageUrl:
       "https://images.unsplash.com/photo-1600100397608-f010f4436a5a?auto=format&fit=crop&w=700&q=80",
@@ -402,7 +406,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Ooty Botanical Garden",
     category: "Hill Station",
     region: "Nilgiris",
-    shortDescription: "Sprawling 55-acre terraced garden in the Nilgiri hills surrounded by tea estates.",
+    shortDescription:
+      "Sprawling 55-acre terraced garden in the Nilgiri hills surrounded by tea estates.",
     address: "Vannarapettai, Ooty, Tamil Nadu 643002",
     imageUrl:
       "https://images.unsplash.com/photo-1589182373726-e4f658ab50f0?auto=format&fit=crop&w=700&q=80",
@@ -439,7 +444,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Kodaikanal Lake",
     category: "Hill Station",
     region: "Kodaikanal",
-    shortDescription: "Star-shaped mountain lake nestled amidst Palani Hills with scenic misty promenade.",
+    shortDescription:
+      "Star-shaped mountain lake nestled amidst Palani Hills with scenic misty promenade.",
     address: "Kodaikanal Lake Road, Kodaikanal, Tamil Nadu 624101",
     imageUrl:
       "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=700&q=80",
@@ -476,7 +482,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Ramanathaswamy Temple",
     category: "Temple",
     region: "Rameswaram",
-    shortDescription: "Famed island pilgrimage site featuring 22 sacred theerthams and the world's longest corridor.",
+    shortDescription:
+      "Famed island pilgrimage site featuring 22 sacred theerthams and the world's longest corridor.",
     address: "Rameswaram Island, Ramanathapuram, Tamil Nadu 623526",
     imageUrl:
       "https://images.unsplash.com/photo-1624461159935-c49b6b7a5996?auto=format&fit=crop&w=700&q=80",
@@ -520,7 +527,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Vivekananda Rock Memorial",
     category: "Coastal",
     region: "Kanyakumari",
-    shortDescription: "Sacred rock monument at the southernmost tip of mainland India where three oceans meet.",
+    shortDescription:
+      "Sacred rock monument at the southernmost tip of mainland India where three oceans meet.",
     address: "Kanyakumari Island, Kanyakumari, Tamil Nadu 629702",
     imageUrl:
       "https://images.unsplash.com/photo-1518684079-3c830dcef090?auto=format&fit=crop&w=700&q=80",
@@ -557,7 +565,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Yercaud Hill Station",
     category: "Hill Station",
     region: "Shevaroy Hills",
-    shortDescription: "Quiet jewel hill station in the Eastern Ghats known for coffee plantations and Lady's Seat.",
+    shortDescription:
+      "Quiet jewel hill station in the Eastern Ghats known for coffee plantations and Lady's Seat.",
     address: "Yercaud Hills, Salem District, Tamil Nadu 636601",
     imageUrl:
       "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=700&q=80",
@@ -594,7 +603,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Chettinad Heritage Mansions",
     category: "Heritage",
     region: "Karaikudi",
-    shortDescription: "19th-century opulent merchant palatial mansions adorned with Burmese teak and Italian marble.",
+    shortDescription:
+      "19th-century opulent merchant palatial mansions adorned with Burmese teak and Italian marble.",
     address: "Kanadukathan, Karaikudi, Sivaganga District, Tamil Nadu 630103",
     imageUrl:
       "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=700&q=80",
@@ -631,7 +641,8 @@ export const TAMIL_NADU_TOURIST_PLACES: TouristPlace[] = [
     name: "Marudamalai Murugan Temple",
     category: "Temple",
     region: "Coimbatore",
-    shortDescription: "12th-century hill shrine dedicated to Lord Murugan surrounded by Western Ghats medicinal forests.",
+    shortDescription:
+      "12th-century hill shrine dedicated to Lord Murugan surrounded by Western Ghats medicinal forests.",
     address: "Marudamalai Road, Somayampalayam, Coimbatore, Tamil Nadu 641046",
     imageUrl:
       "https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=700&q=80",

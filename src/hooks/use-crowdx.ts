@@ -17,11 +17,7 @@ interface UseCrowdXOptions {
   hasLocationPermission?: boolean;
 }
 
-export function useCrowdX({
-  userLat,
-  userLng,
-  hasLocationPermission = true,
-}: UseCrowdXOptions) {
+export function useCrowdX({ userLat, userLng, hasLocationPermission = true }: UseCrowdXOptions) {
   const [detectedCount, setDetectedCount] = useState<number | null>(null);
   const [lastUpdatedTimestamp, setLastUpdatedTimestamp] = useState<number | null>(null);
   const [connectionState, setConnectionState] = useState<CrowdConnectionState>("CONNECTING");

@@ -37,10 +37,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";
 import { useCrowdX } from "@/hooks/use-crowdx";
-import {
-  COMPREHENSIVE_POLICE_STATIONS,
-  type PoliceStationRecord,
-} from "@/lib/police-stations";
+import { COMPREHENSIVE_POLICE_STATIONS, type PoliceStationRecord } from "@/lib/police-stations";
 
 export const Route = createFileRoute("/_authenticated/app/alerts")({
   component: AlertsModule,
@@ -103,7 +100,10 @@ function AlertsModule() {
   // Local UI states
   const [activeTab, setActiveTab] = useState<"all" | "active" | "sos" | "advisories">("all");
   const [expandedWhyIds, setExpandedWhyIds] = useState<Record<string, boolean>>({});
-  const [guidanceModalData, setGuidanceModalData] = useState<{ title: string; desc: string } | null>(null);
+  const [guidanceModalData, setGuidanceModalData] = useState<{
+    title: string;
+    desc: string;
+  } | null>(null);
 
   // Read / Unread State in localStorage
   const [readAlertIds, setReadAlertIds] = useState<Set<string>>(() => {
@@ -226,9 +226,7 @@ function AlertsModule() {
     queryKey: ["police-stations"],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from("police_stations")
-          .select("id, name, lat, lng");
+        const { data, error } = await supabase.from("police_stations").select("id, name, lat, lng");
         if (error) return [];
         return data ?? [];
       } catch {
@@ -271,25 +269,23 @@ function AlertsModule() {
     try {
       const channel = supabase
         .channel("tourist-alerts-live")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "alerts" },
-          (payload) => {
-            void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
-            void queryClient.invalidateQueries({ queryKey: ["unread-alerts-count"] });
+        .on("postgres_changes", { event: "*", schema: "public", table: "alerts" }, (payload) => {
+          void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
+          void queryClient.invalidateQueries({ queryKey: ["unread-alerts-count"] });
 
-            if (payload.eventType === "UPDATE" && payload.new) {
-              const updated = payload.new as { status?: string; type?: string };
-              if (updated.status === "acknowledged") {
-                toast.info("Control Room has acknowledged your alert");
-              } else if (updated.status === "dispatched") {
-                toast.success("Police emergency response unit has been dispatched to your live coordinates");
-              } else if (updated.status === "resolved") {
-                toast.success("Incident has been marked resolved");
-              }
+          if (payload.eventType === "UPDATE" && payload.new) {
+            const updated = payload.new as { status?: string; type?: string };
+            if (updated.status === "acknowledged") {
+              toast.info("Control Room has acknowledged your alert");
+            } else if (updated.status === "dispatched") {
+              toast.success(
+                "Police emergency response unit has been dispatched to your live coordinates",
+              );
+            } else if (updated.status === "resolved") {
+              toast.success("Incident has been marked resolved");
             }
-          },
-        )
+          }
+        })
         .subscribe();
 
       return () => {
@@ -304,7 +300,9 @@ function AlertsModule() {
   const activeSosIncident = useMemo(() => {
     if (!dbAlerts) return null;
     return dbAlerts.find(
-      (a) => a.type === "sos" && (a.status === "active" || a.status === "acknowledged" || a.status === "dispatched"),
+      (a) =>
+        a.type === "sos" &&
+        (a.status === "active" || a.status === "acknowledged" || a.status === "dispatched"),
     );
   }, [dbAlerts]);
 
@@ -407,14 +405,26 @@ function AlertsModule() {
     setIsTriggeringSos(true);
 
     const targetLoc = coords ?? effective ?? { lat: 13.0827, lng: 80.2707 };
-    const locName = locationTitle !== "Detecting your location..." ? locationTitle : "Live GPS Coordinate";
+    const locName =
+      locationTitle !== "Detecting your location..." ? locationTitle : "Live GPS Coordinate";
+
+    // Query if tourist has an active Digital ID to attach verified status
+    const { data: digIdRow } = await supabase
+      .from("digital_ids")
+      .select("digital_id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const idTag = digIdRow?.digital_id ? ` [Verified Digital ID: ${digIdRow.digital_id} ✓]` : "";
 
     const { error } = await supabase.from("alerts").insert({
       user_id: user.id,
       type: "sos",
       message: currentZone
-        ? `Emergency SOS triggered in ${currentZone.name} near ${locName}`
-        : `Emergency SOS triggered near ${locName}`,
+        ? `Emergency SOS triggered in ${currentZone.name} near ${locName}${idTag}`
+        : `Emergency SOS triggered near ${locName}${idTag}`,
       lat: targetLoc.lat,
       lng: targetLoc.lng,
       status: "active",
@@ -493,8 +503,10 @@ function AlertsModule() {
         type: "crowd",
         severity: "CRITICAL",
         title: "🚨 Crowd Surge Detected (Test Simulator)",
-        message: "Rapid increase in pedestrian congestion detected near your sector (142 people detected).",
-        whyExplanation: "Developer simulation: CrowdX YOLO vision camera reported sudden 300% influx over standard capacity baseline.",
+        message:
+          "Rapid increase in pedestrian congestion detected near your sector (142 people detected).",
+        whyExplanation:
+          "Developer simulation: CrowdX YOLO vision camera reported sudden 300% influx over standard capacity baseline.",
         locationName: crowdMatchedLocation?.name || "Marina Coastal Sector",
         distanceMeters: 450,
         timestamp: now,
@@ -516,7 +528,8 @@ function AlertsModule() {
           locationName: crowdMatchedLocation.name,
           distanceMeters: crowdDistanceKm ? Math.round(crowdDistanceKm * 1000) : undefined,
           timestamp: now,
-          recommendedAction: "Avoid entering the main gathering point; consider taking an alternate perimeter walkway.",
+          recommendedAction:
+            "Avoid entering the main gathering point; consider taking an alternate perimeter walkway.",
           actionType: "map",
           actionLabel: "View Crowd Zone on Map",
           actionUrl: "/app/map",
@@ -532,7 +545,8 @@ function AlertsModule() {
           locationName: crowdMatchedLocation.name,
           distanceMeters: crowdDistanceKm ? Math.round(crowdDistanceKm * 1000) : undefined,
           timestamp: now,
-          recommendedAction: "Keep your personal belongings secure and stay alert in crowded lanes.",
+          recommendedAction:
+            "Keep your personal belongings secure and stay alert in crowded lanes.",
           actionType: "map",
           actionLabel: "View Safe Route",
           actionUrl: "/app/map",
@@ -548,11 +562,14 @@ function AlertsModule() {
           type: "geofence",
           severity: "CRITICAL",
           title: `Monitored Restricted Zone: ${currentZone.name}`,
-          message: currentZone.description || "You have entered a restricted or high-caution tourist perimeter.",
+          message:
+            currentZone.description ||
+            "You have entered a restricted or high-caution tourist perimeter.",
           whyExplanation: `Your live satellite coordinates are currently located inside the geofenced boundary of ${currentZone.name}.`,
           locationName: currentZone.name,
           timestamp: now,
-          recommendedAction: "Follow official signage, avoid isolated areas after dusk, and maintain emergency communication.",
+          recommendedAction:
+            "Follow official signage, avoid isolated areas after dusk, and maintain emergency communication.",
           actionType: "guidance",
           actionLabel: "Zone Safety Rules",
         });
@@ -562,11 +579,13 @@ function AlertsModule() {
           type: "geofence",
           severity: "CAUTION",
           title: `Caution Zone: ${currentZone.name}`,
-          message: currentZone.description || "Exercise elevated situational awareness in this vicinity.",
+          message:
+            currentZone.description || "Exercise elevated situational awareness in this vicinity.",
           whyExplanation: `Automated geofence detection triggered upon entry into ${currentZone.name}.`,
           locationName: currentZone.name,
           timestamp: now,
-          recommendedAction: "Stay within monitored tourist paths and keep emergency contacts handy.",
+          recommendedAction:
+            "Stay within monitored tourist paths and keep emergency contacts handy.",
           actionType: "map",
           actionLabel: "View Zone Boundary",
           actionUrl: "/app/map",
@@ -581,11 +600,14 @@ function AlertsModule() {
         type: "weather",
         severity: "WARNING",
         title: "🌧️ Heavy Rain & Flash Storm Alert (Test Simulator)",
-        message: "Severe convective storm with heavy rainfall (42 mm/h) and localized waterlogging detected in your GPS grid.",
-        whyExplanation: "Developer simulation: Open-Meteo test threshold triggered for severe convective precipitation.",
+        message:
+          "Severe convective storm with heavy rainfall (42 mm/h) and localized waterlogging detected in your GPS grid.",
+        whyExplanation:
+          "Developer simulation: Open-Meteo test threshold triggered for severe convective precipitation.",
         locationName: cityArea || "Chennai North / Coastal Sector",
         timestamp: now,
-        recommendedAction: "Seek covered shelter; avoid waterlogged underpasses and coastal breakwaters.",
+        recommendedAction:
+          "Seek covered shelter; avoid waterlogged underpasses and coastal breakwaters.",
         actionType: "guidance",
         actionLabel: "Storm Safety Tips",
         isSimulated: true,
@@ -601,7 +623,8 @@ function AlertsModule() {
           whyExplanation: `Live Open-Meteo meteorological radar reports thunderstorm conditions (Code ${weatherData.weatherCode}) impacting your GPS grid.`,
           locationName: cityArea || "Current Area",
           timestamp: now,
-          recommendedAction: "Seek indoor shelter immediately; stay away from open waters, metal structures, and tall trees.",
+          recommendedAction:
+            "Seek indoor shelter immediately; stay away from open waters, metal structures, and tall trees.",
           actionType: "guidance",
           actionLabel: "Storm Precautions",
         });
@@ -635,7 +658,8 @@ function AlertsModule() {
           whyExplanation: `Live sensor reports temperature exceeding 36°C in your current locality.`,
           locationName: cityArea || "Current Area",
           timestamp: now,
-          recommendedAction: "Stay well-hydrated, wear sun protection, and avoid prolonged midday sun exposure.",
+          recommendedAction:
+            "Stay well-hydrated, wear sun protection, and avoid prolonged midday sun exposure.",
           actionType: "guidance",
           actionLabel: "Heat Safety Tips",
         });
@@ -653,10 +677,12 @@ function AlertsModule() {
         title: "🌙 Nighttime Travel Advisory",
         message: `It is after dark with limited immediate police post coverage (${(nearestPolice.distanceMeters / 1000).toFixed(1)} km to ${nearestPolice.station.name}).`,
         whyExplanation: `Night safety heuristic computed based on local hour (${format(new Date(), "h:mm a")}) and distance to nearest verified police station.`,
-        locationName: locationTitle !== "Detecting your location..." ? locationTitle : "Current Sector",
+        locationName:
+          locationTitle !== "Detecting your location..." ? locationTitle : "Current Sector",
         distanceMeters: nearestPolice.distanceMeters,
         timestamp: now,
-        recommendedAction: "Use registered prepaid transport or stay along brightly lit arterial roads.",
+        recommendedAction:
+          "Use registered prepaid transport or stay along brightly lit arterial roads.",
         actionType: "helpline",
         actionLabel: "Emergency Helpline",
       });
@@ -757,7 +783,8 @@ function AlertsModule() {
               Alerts & Incident Response
             </h1>
             <p className="mt-1 text-xs sm:text-sm font-medium text-[#77716D]">
-              Real-time surrounding intelligence, automatic threat detection, and live SOS coordination.
+              Real-time surrounding intelligence, automatic threat detection, and live SOS
+              coordination.
             </p>
           </div>
 
@@ -827,7 +854,9 @@ function AlertsModule() {
               }`}
             />
             <div className="min-w-0 flex-1">
-              <span className="text-[9px] font-black text-[#77716D] block uppercase">CrowdX YOLO</span>
+              <span className="text-[9px] font-black text-[#77716D] block uppercase">
+                CrowdX YOLO
+              </span>
               <span className="font-bold text-[#1E1E1E] truncate block">
                 {isCrowdLive ? `${crowdDetectedCount ?? 0} Detected` : "Offline"}
               </span>
@@ -842,9 +871,13 @@ function AlertsModule() {
               }`}
             />
             <div className="min-w-0 flex-1">
-              <span className="text-[9px] font-black text-[#77716D] block uppercase">Weather Feed</span>
+              <span className="text-[9px] font-black text-[#77716D] block uppercase">
+                Weather Feed
+              </span>
               <span className="font-bold text-[#1E1E1E] truncate block">
-                {weatherData ? `${weatherData.temp}°C · ${weatherData.text}` : "Weather data unavailable"}
+                {weatherData
+                  ? `${weatherData.temp}°C · ${weatherData.text}`
+                  : "Weather data unavailable"}
               </span>
             </div>
           </div>
@@ -853,7 +886,9 @@ function AlertsModule() {
           <div className="flex items-center gap-2 rounded-2xl bg-white/70 px-3 py-2 border border-[#F6B28F]/20 text-left">
             <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-pulse shrink-0" />
             <div className="min-w-0 flex-1">
-              <span className="text-[9px] font-black text-[#77716D] block uppercase">Police Network</span>
+              <span className="text-[9px] font-black text-[#77716D] block uppercase">
+                Police Network
+              </span>
               <span className="font-bold text-[#1E1E1E] truncate block">
                 {nearestPolice ? nearestPolice.station.name : "Active 24/7"}
               </span>
@@ -872,7 +907,11 @@ function AlertsModule() {
             <button
               onClick={() => {
                 setSimulateWeatherHazard((prev) => !prev);
-                toast.info(simulateWeatherHazard ? "Weather simulation turned off" : "Simulated Heavy Rain alert generated");
+                toast.info(
+                  simulateWeatherHazard
+                    ? "Weather simulation turned off"
+                    : "Simulated Heavy Rain alert generated",
+                );
               }}
               className={`rounded-xl px-2.5 py-1 font-bold border transition-colors cursor-pointer ${
                 simulateWeatherHazard
@@ -886,7 +925,11 @@ function AlertsModule() {
             <button
               onClick={() => {
                 setSimulateCrowdSurge((prev) => !prev);
-                toast.info(simulateCrowdSurge ? "Crowd simulation turned off" : "Simulated Crowd Surge alert generated");
+                toast.info(
+                  simulateCrowdSurge
+                    ? "Crowd simulation turned off"
+                    : "Simulated Crowd Surge alert generated",
+                );
               }}
               className={`rounded-xl px-2.5 py-1 font-bold border transition-colors cursor-pointer ${
                 simulateCrowdSurge
@@ -932,7 +975,9 @@ function AlertsModule() {
                     </div>
                     <p className="text-xs text-[#77716D]">
                       Incident ID: #{activeSosIncident.id.slice(0, 8).toUpperCase()} · Created{" "}
-                      {formatDistanceToNow(new Date(activeSosIncident.created_at), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(activeSosIncident.created_at), {
+                        addSuffix: true,
+                      })}
                     </p>
                   </div>
                 </div>
@@ -970,14 +1015,16 @@ function AlertsModule() {
                   {/* Step 2: Acknowledged */}
                   <div
                     className={`rounded-2xl border p-3 text-left transition-colors ${
-                      activeSosIncident.status === "acknowledged" || activeSosIncident.status === "dispatched"
+                      activeSosIncident.status === "acknowledged" ||
+                      activeSosIncident.status === "dispatched"
                         ? "border-[#39B86B]/40 bg-[#39B86B]/10"
                         : "border-black/10 bg-black/5"
                     }`}
                   >
                     <div
                       className={`flex items-center gap-1.5 ${
-                        activeSosIncident.status === "acknowledged" || activeSosIncident.status === "dispatched"
+                        activeSosIncident.status === "acknowledged" ||
+                        activeSosIncident.status === "dispatched"
                           ? "text-[#39B86B]"
                           : "text-[#77716D]"
                       }`}
@@ -986,7 +1033,8 @@ function AlertsModule() {
                       <span className="text-xs font-black uppercase">2. Acknowledged</span>
                     </div>
                     <p className="mt-1 text-[10px] text-[#77716D]">
-                      {activeSosIncident.status === "acknowledged" || activeSosIncident.status === "dispatched"
+                      {activeSosIncident.status === "acknowledged" ||
+                      activeSosIncident.status === "dispatched"
                         ? "Control Room Verified"
                         : "Awaiting Officer"}
                     </p>
@@ -1002,14 +1050,18 @@ function AlertsModule() {
                   >
                     <div
                       className={`flex items-center gap-1.5 ${
-                        activeSosIncident.status === "dispatched" ? "text-[#E94B5F]" : "text-[#77716D]"
+                        activeSosIncident.status === "dispatched"
+                          ? "text-[#E94B5F]"
+                          : "text-[#77716D]"
                       }`}
                     >
                       <Radio className="h-4 w-4" />
                       <span className="text-xs font-black uppercase">3. Dispatched</span>
                     </div>
                     <p className="mt-1 text-[10px] text-[#77716D]">
-                      {activeSosIncident.status === "dispatched" ? "Patrol Unit En Route" : "Pending Unit"}
+                      {activeSosIncident.status === "dispatched"
+                        ? "Patrol Unit En Route"
+                        : "Pending Unit"}
                     </p>
                   </div>
 
@@ -1035,8 +1087,11 @@ function AlertsModule() {
                         : "⏳ TRANSMITTED: Awaiting officer assignment at Chennai Police Control Room."}
                   </p>
                   <p className="text-[11px] text-[#77716D]">
-                    Nearest Division: {nearestPolice ? nearestPolice.station.name : "Tamil Nadu Coastal Guard"} (
-                    {nearestPolice ? `${(nearestPolice.distanceMeters / 1000).toFixed(1)} km away` : "Active"}
+                    Nearest Division:{" "}
+                    {nearestPolice ? nearestPolice.station.name : "Tamil Nadu Coastal Guard"} (
+                    {nearestPolice
+                      ? `${(nearestPolice.distanceMeters / 1000).toFixed(1)} km away`
+                      : "Active"}
                     )
                   </p>
                 </div>
@@ -1235,9 +1290,13 @@ function AlertsModule() {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#39B86B]/15 text-[#39B86B]">
               <ShieldCheck className="h-7 w-7" />
             </div>
-            <h3 className="text-lg font-black text-[#1E1E1E]">🛡️ ALL CLEAR — Surroundings Monitored</h3>
+            <h3 className="text-lg font-black text-[#1E1E1E]">
+              🛡️ ALL CLEAR — Surroundings Monitored
+            </h3>
             <p className="text-xs text-[#77716D] max-w-md mx-auto">
-              No active safety hazards detected around {locationTitle !== "Detecting your location..." ? locationTitle : "your current area"}. BEACON is actively guarding your trip.
+              No active safety hazards detected around{" "}
+              {locationTitle !== "Detecting your location..." ? locationTitle : "your current area"}
+              . BEACON is actively guarding your trip.
             </p>
           </div>
         )}
@@ -1257,7 +1316,8 @@ function AlertsModule() {
                 </h3>
               </div>
               <p className="text-xs text-[#77716D] max-w-xl">
-                Pressing Emergency SOS transmits your live satellite coordinates and Digital ID details directly to the Tamil Nadu Police command room.
+                Pressing Emergency SOS transmits your live satellite coordinates and Digital ID
+                details directly to the Tamil Nadu Police command room.
               </p>
             </div>
 
@@ -1325,7 +1385,8 @@ function AlertsModule() {
               })
               .map((alertItem) => {
                 const isSos = alertItem.type === "sos";
-                const isResolved = alertItem.status === "resolved" || alertItem.status === "cancelled";
+                const isResolved =
+                  alertItem.status === "resolved" || alertItem.status === "cancelled";
                 const isRead = readAlertIds.has(alertItem.id);
 
                 return (
@@ -1372,7 +1433,9 @@ function AlertsModule() {
                           )}
 
                           <span className="text-[11px] text-[#77716D]">
-                            {formatDistanceToNow(new Date(alertItem.created_at), { addSuffix: true })}
+                            {formatDistanceToNow(new Date(alertItem.created_at), {
+                              addSuffix: true,
+                            })}
                           </span>
                         </div>
 
@@ -1448,7 +1511,8 @@ function AlertsModule() {
               </div>
 
               <p className="text-xs text-[#77716D] leading-relaxed">
-                Are you sure you want to clear your safety alerts? This will clear historical notices and resolved incidents.
+                Are you sure you want to clear your safety alerts? This will clear historical
+                notices and resolved incidents.
                 <span className="block mt-1 font-bold text-[#E94B5F]">
                   * Active Emergency SOS incidents will NOT be deleted.
                 </span>
@@ -1497,16 +1561,22 @@ function AlertsModule() {
               </div>
 
               <div className="space-y-1">
-                <h3 className="text-xl font-black text-[#E94B5F]">Transmitting SOS in {sosCountdownSeconds}s</h3>
+                <h3 className="text-xl font-black text-[#E94B5F]">
+                  Transmitting SOS in {sosCountdownSeconds}s
+                </h3>
                 <p className="text-xs text-[#77716D]">
-                  Emergency alert with your live GPS location will be broadcast to Tamil Nadu Police.
+                  Emergency alert with your live GPS location will be broadcast to Tamil Nadu
+                  Police.
                 </p>
               </div>
 
               <div className="rounded-2xl bg-[#FFF8F3] p-3 text-xs text-left border border-[#F6B28F]/30 space-y-1">
                 <p className="font-bold text-[#1E1E1E]">📍 Target GPS: {locationTitle}</p>
                 <p className="text-[11px] text-[#77716D]">
-                  Coordinates: {coords ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : `${effective?.lat?.toFixed(4) ?? "13.0827"}, ${effective?.lng?.toFixed(4) ?? "80.2707"}`}
+                  Coordinates:{" "}
+                  {coords
+                    ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
+                    : `${effective?.lat?.toFixed(4) ?? "13.0827"}, ${effective?.lng?.toFixed(4) ?? "80.2707"}`}
                 </p>
               </div>
 
@@ -1570,7 +1640,8 @@ function AlertsModule() {
               </div>
 
               <p className="text-xs text-[#77716D] text-left">
-                Are you sure you want to cancel this SOS incident? This will notify emergency response units that you are safe.
+                Are you sure you want to cancel this SOS incident? This will notify emergency
+                response units that you are safe.
               </p>
 
               <div className="flex items-center gap-3 pt-2">

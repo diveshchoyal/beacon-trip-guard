@@ -117,10 +117,7 @@ export function findMatchingVoice(
   // 3. Name match in voice name (e.g. "Google Tamil", "Microsoft Valluvar")
   match = voices.find((v) => {
     const vName = v.name.toLowerCase();
-    return (
-      (langName && vName.includes(langName)) ||
-      (nativeName && vName.includes(nativeName))
-    );
+    return (langName && vName.includes(langName)) || (nativeName && vName.includes(nativeName));
   });
   if (match) return match;
 

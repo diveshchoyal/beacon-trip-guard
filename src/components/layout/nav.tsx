@@ -59,13 +59,7 @@ function useActive() {
   return (to: string, exact?: boolean) => (exact ? pathname === to : pathname.startsWith(to));
 }
 
-export function TopBar({
-  title,
-  links,
-}: {
-  title: string;
-  links: NavLink[];
-}) {
+export function TopBar({ title, links }: { title: string; links: NavLink[] }) {
   const [open, setOpen] = useState(false);
   const isActive = useActive();
   const signOut = useSignOut();
@@ -106,7 +100,13 @@ export function TopBar({
             >
               <div className="flex items-center justify-between">
                 <div className="flex min-w-0 items-center gap-2">
-                  <img src={logo} alt="" width={1024} height={1024} className="h-9 w-9 shrink-0 object-contain" />
+                  <img
+                    src={logo}
+                    alt=""
+                    width={1024}
+                    height={1024}
+                    className="h-9 w-9 shrink-0 object-contain"
+                  />
                   <span className="truncate text-sm font-semibold tracking-[0.25em]">BEACON</span>
                 </div>
                 <button
@@ -178,7 +178,12 @@ export function BottomTabs() {
                   active ? "text-primary-foreground" : "text-muted-foreground",
                 )}
               />
-              <span className={cn("relative", active ? "text-primary-foreground" : "text-muted-foreground")}>
+              <span
+                className={cn(
+                  "relative",
+                  active ? "text-primary-foreground" : "text-muted-foreground",
+                )}
+              >
                 {t.label}
               </span>
             </Link>
@@ -189,20 +194,20 @@ export function BottomTabs() {
   );
 }
 
-export function DesktopSidebar({
-  links,
-  subtitle,
-}: {
-  links: NavLink[];
-  subtitle: string;
-}) {
+export function DesktopSidebar({ links, subtitle }: { links: NavLink[]; subtitle: string }) {
   const isActive = useActive();
   const signOut = useSignOut();
 
   return (
     <aside className="glass sticky top-6 hidden h-[calc(100vh-3rem)] w-64 shrink-0 flex-col p-5 lg:flex">
       <div className="flex min-w-0 items-center gap-3">
-        <img src={logo} alt="" width={1024} height={1024} className="h-10 w-10 shrink-0 object-contain" />
+        <img
+          src={logo}
+          alt=""
+          width={1024}
+          height={1024}
+          className="h-10 w-10 shrink-0 object-contain"
+        />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-[0.25em]">BEACON</p>
           <p className="truncate text-xs text-muted-foreground">{subtitle}</p>

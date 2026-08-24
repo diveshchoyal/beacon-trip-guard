@@ -81,7 +81,9 @@ function Registry() {
                   {r.full_name || "Unnamed"}
                 </td>
                 <td className="py-3 pr-4 text-muted-foreground">{r.phone ?? "—"}</td>
-                <td className="py-3 pr-4 text-muted-foreground">{r.id_record?.digital_id ?? "—"}</td>
+                <td className="py-3 pr-4 text-muted-foreground">
+                  {r.id_record?.digital_id ?? "—"}
+                </td>
                 <td className="py-3 pr-4 text-muted-foreground">
                   {r.id_record?.destination ?? "—"}
                 </td>

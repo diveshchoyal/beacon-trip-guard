@@ -33,10 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";
 import { useCrowdX } from "@/hooks/use-crowdx";
-import {
-  COMPREHENSIVE_POLICE_STATIONS,
-  type PoliceStationRecord,
-} from "@/lib/police-stations";
+import { COMPREHENSIVE_POLICE_STATIONS, type PoliceStationRecord } from "@/lib/police-stations";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
@@ -362,7 +359,9 @@ function TouristHome() {
     const { error: e } = await supabase.from("alerts").insert({
       user_id: user.id,
       type: "sos",
-      message: currentZone ? `SOS raised in ${currentZone.name}` : "Emergency SOS raised by tourist",
+      message: currentZone
+        ? `SOS raised in ${currentZone.name}`
+        : "Emergency SOS raised by tourist",
       lat: targetLoc.lat,
       lng: targetLoc.lng,
     });
@@ -586,9 +585,7 @@ function TouristHome() {
                   >
                     {locationTitle}
                   </p>
-                  <p className="mt-0.5 text-xs text-[#77716D] truncate">
-                    {locationSublabel}
-                  </p>
+                  <p className="mt-0.5 text-xs text-[#77716D] truncate">{locationSublabel}</p>
                 </div>
               </div>
 
@@ -750,8 +747,7 @@ function TouristHome() {
               </span>
               {isCrowdLive ? (
                 <span className="flex items-center gap-1 text-[9px] font-black text-[#39B86B] uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#39B86B] animate-ping" />
-                  ● LIVE
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#39B86B] animate-ping" />● LIVE
                 </span>
               ) : crowdConnectionState === "OFFLINE" ? (
                 <span className="flex items-center gap-1 text-[9px] font-bold text-[#77716D] uppercase tracking-wider">
@@ -831,9 +827,7 @@ function TouristHome() {
               <Building2 className="h-4 w-4" />
             </div>
           </div>
-          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
-            {policeDistanceLabel}
-          </p>
+          <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">{policeDistanceLabel}</p>
           <p className="mt-0.5 text-xs text-blue-600 font-bold truncate">
             {geoStatus === "locating" && !coords
               ? "Finding nearby police..."
@@ -854,11 +848,7 @@ function TouristHome() {
             </div>
           </div>
           <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
-            {weatherLoading
-              ? "Loading..."
-              : weatherData
-                ? `${weatherData.temp}°C`
-                : "Unavailable"}
+            {weatherLoading ? "Loading..." : weatherData ? `${weatherData.temp}°C` : "Unavailable"}
           </p>
           <p className="mt-0.5 text-xs text-[#77716D] font-bold truncate">
             {weatherLoading

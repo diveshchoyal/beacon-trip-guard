@@ -25,8 +25,8 @@ export const CROWDX_MONITORED_LOCATIONS: CrowdXLocation[] = [
     name: "Tondiarpet Commercial Hub",
     type: "market",
     address: "TH Road, Tondiarpet, Chennai",
-    lat: 13.1250,
-    lng: 80.2890,
+    lat: 13.125,
+    lng: 80.289,
     capacity: 6000,
     cameraId: "cam_tondiarpet_01",
   },
@@ -35,8 +35,8 @@ export const CROWDX_MONITORED_LOCATIONS: CrowdXLocation[] = [
     name: "Kasimedu Harbour Promenade",
     type: "harbour",
     address: "Kasimedu, Royapuram, Chennai",
-    lat: 13.1250,
-    lng: 80.2970,
+    lat: 13.125,
+    lng: 80.297,
     capacity: 12000,
     cameraId: "cam_kasimedu_01",
   },
@@ -57,7 +57,7 @@ export const CROWDX_MONITORED_LOCATIONS: CrowdXLocation[] = [
     name: "Marina Beach",
     type: "beach",
     address: "Marina Beach Road, Triplicane, Chennai",
-    lat: 13.0500,
+    lat: 13.05,
     lng: 80.2824,
     capacity: 50000,
     cameraId: "cam_marina_01",
@@ -107,7 +107,7 @@ export const CROWDX_MONITORED_LOCATIONS: CrowdXLocation[] = [
     name: "Forum Vijaya Mall",
     type: "mall",
     address: "Arcot Road, Vadapalani, Chennai",
-    lat: 13.0500,
+    lat: 13.05,
     lng: 80.2121,
     capacity: 4000,
     cameraId: "cam_forum_01",
@@ -345,16 +345,11 @@ export function classifyCrowdDensity(
 export function getCrowdXConfig() {
   const envObj = (import.meta as { env?: Record<string, string> }).env || {};
 
-  const rawApiUrl =
-    envObj.VITE_CROWDX_API_URL ||
-    envObj.VITE_API_URL ||
-    "http://localhost:8000";
+  const rawApiUrl = envObj.VITE_CROWDX_API_URL || envObj.VITE_API_URL || "http://localhost:8000";
 
   const cleanApiUrl = rawApiUrl.replace(/\/$/, "");
 
-  const rawWsUrl =
-    envObj.VITE_CROWDX_WS_URL ||
-    cleanApiUrl.replace(/^http/, "ws");
+  const rawWsUrl = envObj.VITE_CROWDX_WS_URL || cleanApiUrl.replace(/^http/, "ws");
 
   const cleanWsUrl = rawWsUrl.replace(/\/$/, "");
 

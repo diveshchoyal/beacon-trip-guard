@@ -14,11 +14,7 @@ export default defineConfig({
   },
   vite: {
     server: {
-      allowedHosts: [
-        "clash-ought-pacific.ngrok-free.dev",
-        ".ngrok-free.dev",
-        ".ngrok-free.app",
-      ],
+      allowedHosts: ["clash-ought-pacific.ngrok-free.dev", ".ngrok-free.dev", ".ngrok-free.app"],
     },
   },
 });

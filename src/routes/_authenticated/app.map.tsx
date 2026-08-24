@@ -192,9 +192,7 @@ function TouristMap() {
                     <span>{label}</span>
                     <span
                       className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
-                        isActive
-                          ? "bg-black/10 text-inherit"
-                          : "bg-black/5 text-muted-foreground"
+                        isActive ? "bg-black/10 text-inherit" : "bg-black/5 text-muted-foreground"
                       }`}
                     >
                       {count}
@@ -275,7 +273,8 @@ function TouristMap() {
                     if (typeof navigator !== "undefined" && navigator.geolocation) {
                       navigator.geolocation.getCurrentPosition(
                         () => window.location.reload(),
-                        () => toast.error("Please enable location permissions in browser settings."),
+                        () =>
+                          toast.error("Please enable location permissions in browser settings."),
                       );
                     }
                   }}

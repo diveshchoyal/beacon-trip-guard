@@ -12,7 +12,10 @@ function MapSkeleton() {
       <div className="relative flex h-16 w-16 items-center justify-center">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/25 opacity-75" />
         <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg backdrop-blur-md border border-white/40">
-          <Compass className="h-6 w-6 animate-spin text-white" style={{ animationDuration: "3s" }} />
+          <Compass
+            className="h-6 w-6 animate-spin text-white"
+            style={{ animationDuration: "3s" }}
+          />
         </div>
       </div>
       <div className="space-y-1">

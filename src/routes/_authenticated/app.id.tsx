@@ -8,10 +8,12 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  Edit3,
   FileCheck,
   Fingerprint,
   Globe,
   HeartPulse,
+  IdCard,
   MapPin,
   PhoneCall,
   QrCode,
@@ -19,7 +21,6 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldX,
-  Sparkles,
   User,
   X,
 } from "lucide-react";
@@ -31,13 +32,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { GlassCard, PressButton } from "@/components/ui/glass";
 import { Field } from "@/routes/login";
 import { generateDigitalId, verifyDigitalId } from "@/lib/digital-id.functions";
-import {
-  loadDocumentWallet,
-  saveDocumentWallet,
-  clearDocumentWallet,
-  getDemoDocumentWallet,
-  type DocumentWallet,
-} from "@/lib/documents.types";
+import { loadDocumentWallet, saveDocumentWallet, type DocumentWallet } from "@/lib/documents.types";
 
 export const Route = createFileRoute("/_authenticated/app/id")({
   component: DigitalIdPage,
@@ -51,22 +46,29 @@ type VerifyResult = {
 };
 
 function DigitalIdPage() {
-  const { user, profile } = useAuth();
+  const { user, profile, refresh } = useAuth();
   const queryClient = useQueryClient();
   const generate = useServerFn(generateDigitalId);
   const verify = useServerFn(verifyDigitalId);
 
-  // Document Wallet data for auto-fill
+  // Document Wallet data from profile/local wallet
   const [wallet, setWallet] = useState<DocumentWallet>({});
 
-  // Digital ID Form State
+  // Digital ID Form State (Empty by default unless user has saved data)
   const [form, setForm] = useState({
+    fullName: "",
+    dob: "",
+    nationality: "",
+    gender: "",
     id_number: "",
-    destination: "Thailand",
-    trip_start: "2026-08-22",
-    trip_end: "2026-08-31",
-    emergency_contact: "+91 90000 00000",
-    blood_group: "O+",
+    visa_status: "",
+    visa_expiry: "",
+    destination: "",
+    trip_start: "",
+    trip_end: "",
+    emergency_contact_name: "",
+    emergency_contact: "",
+    blood_group: "",
   });
 
   const [editMode, setEditMode] = useState(false);
@@ -99,38 +101,40 @@ function DigitalIdPage() {
     },
   });
 
-  // Auto-fill from My Documents on load
+  // Auto-fill from My Documents on load if available
   useEffect(() => {
     if (user?.id) {
-      let docWallet = loadDocumentWallet(user.id);
-
-      // If completely empty on first visit, load demo document template
-      if (!docWallet.passport && !docWallet.visa) {
-        docWallet = getDemoDocumentWallet();
-        saveDocumentWallet(user.id, docWallet);
-      }
-
+      const docWallet = loadDocumentWallet(user.id);
       setWallet(docWallet);
-
-      // Auto-populate form fields from saved wallet
-      const passportNum = docWallet.passport?.docNumber || "";
-      const citizenNum = docWallet.citizenId?.idNumber || "";
-      const dest = docWallet.visa?.destination || "Thailand";
-      const start = docWallet.visa?.validFrom || "2026-08-22";
-      const end = docWallet.visa?.expiry || "2026-08-31";
-      const contact = docWallet.emergencyContactPhone || profile?.phone || "+91 90000 00000";
 
       setForm((prev) => ({
         ...prev,
-        id_number: prev.id_number || passportNum || citizenNum || "DEMO-P1234567",
-        destination: prev.destination || dest,
-        trip_start: prev.trip_start || start,
-        trip_end: prev.trip_end || end,
-        emergency_contact: prev.emergency_contact || contact,
-        blood_group: prev.blood_group || docWallet.bloodGroup || "O+",
+        fullName: prev.fullName || docWallet.passport?.fullName || profile?.full_name || "",
+        dob: prev.dob || docWallet.passport?.dob || "",
+        nationality: prev.nationality || docWallet.passport?.nationality || "",
+        gender: prev.gender || docWallet.passport?.gender || "",
+        id_number:
+          prev.id_number ||
+          record?.id_number ||
+          docWallet.passport?.docNumber ||
+          docWallet.citizenId?.idNumber ||
+          "",
+        visa_status: prev.visa_status || docWallet.visa?.visaStatus || "",
+        visa_expiry: prev.visa_expiry || docWallet.visa?.expiry || "",
+        destination: prev.destination || record?.destination || docWallet.visa?.destination || "",
+        trip_start: prev.trip_start || record?.trip_start || docWallet.visa?.validFrom || "",
+        trip_end: prev.trip_end || record?.trip_end || docWallet.visa?.expiry || "",
+        emergency_contact_name: prev.emergency_contact_name || docWallet.emergencyContactName || "",
+        emergency_contact:
+          prev.emergency_contact ||
+          record?.emergency_contact ||
+          docWallet.emergencyContactPhone ||
+          profile?.phone ||
+          "",
+        blood_group: prev.blood_group || docWallet.bloodGroup || "",
       }));
     }
-  }, [user, profile]);
+  }, [user, profile, record]);
 
   // 15-Minute Countdown Timer for QR Credential
   useEffect(() => {
@@ -157,46 +161,84 @@ function DigitalIdPage() {
     setQrModalOpen(true);
   };
 
-  const handleLoadDemo = () => {
-    if (!user) return;
-    const demo = getDemoDocumentWallet();
-    setWallet(demo);
-    saveDocumentWallet(user.id, demo);
-    setForm({
-      id_number: demo.passport?.docNumber || "DEMO-P1234567",
-      destination: demo.visa?.destination || "Thailand",
-      trip_start: demo.visa?.validFrom || "2026-08-22",
-      trip_end: "2026-08-31",
-      emergency_contact: demo.emergencyContactPhone || "+91 90000 00000",
-      blood_group: demo.bloodGroup || "O+",
-    });
-    toast.success("Loaded realistic Demo Documents (Divesh Choyal · Thailand trip)!");
-  };
-
-  const handleClearDemo = () => {
-    if (!user) return;
-    clearDocumentWallet(user.id);
-    setWallet({});
-    toast.info("Cleared document wallet");
-  };
-
   const setField = (key: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
 
-  // Issue / Generate Digital ID
+  // Issue / Generate Digital ID from Manual / Auto-filled Details
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!form.id_number.trim()) {
+      toast.error("Please enter your Passport or Citizen ID number.");
+      return;
+    }
+    if (!form.destination.trim()) {
+      toast.error("Please enter your trip destination.");
+      return;
+    }
+    if (!form.trip_start || !form.trip_end) {
+      toast.error("Please enter both trip start and end dates.");
+      return;
+    }
+    if (!form.emergency_contact.trim()) {
+      toast.error("Please provide an emergency contact phone number.");
+      return;
+    }
+
     setBusy(true);
     try {
+      if (user?.id) {
+        // 1. Update user profile name/phone if updated
+        if (form.fullName.trim() && form.fullName.trim() !== profile?.full_name) {
+          await supabase
+            .from("profiles")
+            .update({ full_name: form.fullName.trim() })
+            .eq("id", user.id);
+          await refresh();
+        }
+
+        // 2. Persist document info to My Documents wallet
+        const currentWallet = loadDocumentWallet(user.id);
+        const updatedWallet: DocumentWallet = {
+          ...currentWallet,
+          passport: {
+            docNumber: form.id_number.trim(),
+            fullName: form.fullName.trim() || profile?.full_name || "Traveler",
+            dob: form.dob || currentWallet.passport?.dob || "",
+            nationality:
+              form.nationality.trim() || currentWallet.passport?.nationality || "Traveler",
+            gender: form.gender.trim() || currentWallet.passport?.gender || "",
+            expiry: currentWallet.passport?.expiry || "2030-12-31",
+            savedAt: new Date().toISOString(),
+            verified: true,
+          },
+          visa: {
+            visaNumber: currentWallet.visa?.visaNumber || "V-IN-001",
+            visaStatus: form.visa_status.trim() || "Valid",
+            destination: form.destination.trim(),
+            validFrom: form.trip_start,
+            expiry: form.visa_expiry || form.trip_end,
+            savedAt: new Date().toISOString(),
+          },
+          emergencyContactName: form.emergency_contact_name.trim(),
+          emergencyContactPhone: form.emergency_contact.trim(),
+          bloodGroup: form.blood_group.trim(),
+        };
+        saveDocumentWallet(user.id, updatedWallet);
+        setWallet(updatedWallet);
+      }
+
+      // 3. Anchor and generate Digital ID via server function
       await generate({
         data: {
-          id_number: form.id_number.trim() || "DEMO-P1234567",
-          destination: form.destination.trim() || "Thailand",
+          id_number: form.id_number.trim(),
+          destination: form.destination.trim(),
           trip_start: form.trip_start,
           trip_end: form.trip_end,
-          emergency_contact: form.emergency_contact.trim() || "+91 90000 00000",
+          emergency_contact: form.emergency_contact.trim(),
         },
       });
-      toast.success("BEACON Digital ID issued and anchored to tamper-evident ledger.");
+
+      toast.success("BEACON Digital ID created and anchored to ledger!");
       await queryClient.invalidateQueries({ queryKey: ["digital-id"] });
       setEditMode(false);
     } catch (err) {
@@ -232,8 +274,14 @@ function DigitalIdPage() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   }, [qrSecondsLeft]);
 
-  const touristName = profile?.full_name?.trim() || wallet.passport?.fullName || "Divesh Choyal";
-  const nationality = wallet.passport?.nationality || "Indian";
+  const touristName =
+    form.fullName.trim() ||
+    profile?.full_name?.trim() ||
+    wallet.passport?.fullName ||
+    "Tourist Pass";
+
+  const nationality =
+    form.nationality.trim() || wallet.passport?.nationality || "International Traveler";
 
   if (isLoading) {
     return (
@@ -246,65 +294,58 @@ function DigitalIdPage() {
   return (
     <div className="space-y-6 text-[#1E1E1E]">
       {/* ========================================================================= */}
-      {/* 1. BEACON DIGITAL ID HEADER WITH PROMINENT BRANDING */}
+      {/* 1. BEACON BRANDING HEADER */}
       {/* ========================================================================= */}
       <div className="rounded-[36px] border border-[#F6B28F]/35 bg-gradient-to-br from-white via-[#FFF8F3] to-[#FFF1EA] p-6 sm:p-8 shadow-[0_16px_45px_rgba(255,111,97,0.08)] text-left">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           {/* Logo & Main Title */}
-          <div className="flex items-center gap-4 sm:gap-5">
-            <img
-              src={beaconLogo}
-              alt="BEACON"
-              className="h-16 w-16 sm:h-20 sm:w-20 object-contain drop-shadow-md shrink-0"
-            />
+          <div className="flex items-center gap-4 sm:gap-6">
+            <div className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-3xl bg-white p-2.5 shadow-md border border-[#F6B28F]/30 shrink-0">
+              <img
+                src={beaconLogo}
+                alt="BEACON"
+                className="h-full w-full object-contain drop-shadow-sm"
+              />
+            </div>
+
             <div>
-              <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.25em] text-[#FF6F61] block">
+              <span className="text-[11px] sm:text-xs font-black uppercase tracking-[0.3em] text-[#FF6F61] block">
                 BEACON
               </span>
               <h1 className="mt-0.5 text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-[#1E1E1E]">
                 VERIFIED TOURIST DIGITAL ID
               </h1>
-              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[#39B86B]/15 px-3 py-0.5 text-xs font-black uppercase tracking-wide text-[#39B86B]">
+              <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-[#39B86B]/15 px-3 py-0.5 text-xs font-black uppercase tracking-wide text-[#39B86B]">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 <span>Identity Verified</span>
               </div>
             </div>
           </div>
 
-          {/* Top Actions & Demo Toggle */}
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-center shrink-0">
-            <button
-              type="button"
-              onClick={handleLoadDemo}
-              className="flex items-center gap-1.5 rounded-2xl bg-white border border-[#F6B28F]/40 px-3.5 py-2 text-xs font-black text-[#FF6F61] hover:bg-[#FF6F61] hover:text-white transition-colors shadow-2xs cursor-pointer"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>⚡ Load Demo Data</span>
-            </button>
+          {/* Navigation link to My Documents */}
+          <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
             <Link
               to="/app/profile"
-              className="flex items-center gap-1.5 rounded-2xl bg-white border border-[#F6B28F]/40 px-3.5 py-2 text-xs font-bold text-[#1E1E1E] hover:bg-[#FFF8F3] transition-colors shadow-2xs"
+              className="flex items-center gap-1.5 rounded-2xl bg-white border border-[#F6B28F]/40 px-4 py-2.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FFF8F3] transition-colors shadow-2xs"
             >
               <FileCheck className="h-4 w-4 text-[#FF6F61]" />
-              <span>My Documents</span>
+              <span>My Documents Wallet</span>
             </Link>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. DIGITAL ID CREDENTIAL CARD (MINIMAL, CLEAN UI) */}
+      {/* 2. COMPLETED DIGITAL ID CARD (SHOWN IMMEDIATELY WHEN RECORD EXISTS) */}
       {/* ========================================================================= */}
       {record && !editMode ? (
         <div className="rounded-[36px] border border-[#F6B28F]/35 bg-white/95 p-6 sm:p-8 shadow-[0_16px_50px_rgba(255,111,97,0.08)] backdrop-blur-md text-left space-y-6">
           {/* Top Bar: Pass Type + Verified Badge */}
           <div className="flex items-center justify-between border-b border-black/5 pb-4">
             <div className="flex items-center gap-3">
-              <img
-                src={beaconLogo}
-                alt="BEACON"
-                className="h-10 w-10 object-contain drop-shadow-xs"
-              />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white p-1.5 shadow-xs border border-[#F6B28F]/25 shrink-0">
+                <img src={beaconLogo} alt="BEACON" className="h-full w-full object-contain" />
+              </div>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D] block">
                   BEACON OFFICIAL CREDENTIAL
@@ -343,7 +384,7 @@ function DigitalIdPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-[#FFF8F3] px-3.5 py-2 border border-[#F6B28F]/25 text-xs text-left self-start sm:self-center">
+            <div className="rounded-2xl bg-[#FFF8F3] px-4 py-2 border border-[#F6B28F]/25 text-xs text-left self-start sm:self-center">
               <span className="text-[9px] font-black uppercase text-[#77716D] block">
                 Govt Document Ref
               </span>
@@ -360,7 +401,7 @@ function DigitalIdPage() {
             </span>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-[#FFF8F3] p-3.5 border border-[#F6B28F]/25 space-y-1">
+              <div className="rounded-2xl bg-[#FFF8F3] p-4 border border-[#F6B28F]/25 space-y-1">
                 <span className="text-[10px] font-black uppercase text-[#77716D] flex items-center gap-1">
                   <MapPin className="h-3 w-3 text-[#FF6F61]" />
                   Destination
@@ -368,7 +409,7 @@ function DigitalIdPage() {
                 <p className="text-sm font-black text-[#1E1E1E]">{record.destination}</p>
               </div>
 
-              <div className="rounded-2xl bg-[#FFF8F3] p-3.5 border border-[#F6B28F]/25 space-y-1">
+              <div className="rounded-2xl bg-[#FFF8F3] p-4 border border-[#F6B28F]/25 space-y-1">
                 <span className="text-[10px] font-black uppercase text-[#77716D] flex items-center gap-1">
                   <Calendar className="h-3 w-3 text-[#FF6F61]" />
                   Travel Duration
@@ -382,14 +423,14 @@ function DigitalIdPage() {
 
           <div className="h-px bg-black/5" />
 
-          {/* Section 3: EMERGENCY & BLOOD GROUP */}
+          {/* Section 3: EMERGENCY & MEDICAL */}
           <div className="space-y-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D]">
               EMERGENCY CONTACT & MEDICAL
             </span>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-[#FFF8F3] p-3.5 border border-[#F6B28F]/25 space-y-1">
+              <div className="rounded-2xl bg-[#FFF8F3] p-4 border border-[#F6B28F]/25 space-y-1">
                 <span className="text-[10px] font-black uppercase text-[#77716D] flex items-center gap-1">
                   <PhoneCall className="h-3 w-3 text-[#39B86B]" />
                   Emergency Contact
@@ -397,10 +438,10 @@ function DigitalIdPage() {
                 <p className="text-sm font-bold text-[#1E1E1E]">{record.emergency_contact}</p>
               </div>
 
-              <div className="rounded-2xl bg-[#FFF8F3] p-3.5 border border-[#F6B28F]/25 space-y-1">
+              <div className="rounded-2xl bg-[#FFF8F3] p-4 border border-[#F6B28F]/25 space-y-1">
                 <span className="text-[10px] font-black uppercase text-[#77716D] flex items-center gap-1">
                   <HeartPulse className="h-3 w-3 text-[#E94B5F]" />
-                  Blood Group (Optional)
+                  Blood Group
                 </span>
                 <p className="text-sm font-bold text-[#1E1E1E]">{form.blood_group || "O+"}</p>
               </div>
@@ -415,7 +456,7 @@ function DigitalIdPage() {
               className="w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#FF6F61] via-[#F6B28F] to-[#FF6F61] py-3.5 px-6 text-sm font-black text-white shadow-lg shadow-[#FF6F61]/30 hover:scale-[1.01] active:scale-98 transition-all cursor-pointer"
             >
               <QrCode className="h-5 w-5" />
-              <span>SHOW DIGITAL ID</span>
+              <span>SHOW DIGITAL ID / QR</span>
             </button>
 
             {/* Verify Integrity Button */}
@@ -431,30 +472,36 @@ function DigitalIdPage() {
             {/* Edit Button */}
             <button
               onClick={() => setEditMode(true)}
-              className="w-full sm:w-auto rounded-2xl bg-black/5 py-3.5 px-4 text-xs font-bold text-[#77716D] hover:bg-black/10 hover:text-[#1E1E1E] transition-colors cursor-pointer shrink-0"
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-2xl bg-black/5 py-3.5 px-4 text-xs font-bold text-[#77716D] hover:bg-black/10 hover:text-[#1E1E1E] transition-colors cursor-pointer shrink-0"
             >
-              Edit Details
+              <Edit3 className="h-3.5 w-3.5" />
+              <span>Edit Details</span>
             </button>
           </div>
         </div>
       ) : (
-        /* Digital ID Form / Issuance Mode */
-        <div className="rounded-[36px] border border-[#F6B28F]/35 bg-white/95 p-6 sm:p-8 shadow-sm text-left space-y-5">
-          <div className="flex items-center justify-between border-b border-black/5 pb-3">
+        /* ========================================================================= */
+        /* 3. MANUAL DIGITAL ID CREATION / EDIT FORM */
+        /* ========================================================================= */
+        <div className="rounded-[36px] border border-[#F6B28F]/35 bg-white/95 p-6 sm:p-8 shadow-sm text-left space-y-6">
+          <div className="flex items-center justify-between border-b border-black/5 pb-4">
             <div className="flex items-center gap-3">
-              <img src={beaconLogo} alt="BEACON" className="h-9 w-9 object-contain" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white p-2 shadow-xs border border-[#F6B28F]/25 shrink-0">
+                <img src={beaconLogo} alt="BEACON" className="h-full w-full object-contain" />
+              </div>
               <div>
                 <h2 className="text-lg font-black text-[#1E1E1E]">
-                  {record ? "Update Your Digital ID" : "Issue BEACON Digital ID"}
+                  {record ? "Update Your Digital ID" : "Create BEACON Digital ID"}
                 </h2>
                 <p className="text-xs text-[#77716D]">
-                  Information is verified and anchored with cryptographic tamper evidence.
+                  Enter your details below to generate your secure, tamper-evident tourist pass.
                 </p>
               </div>
             </div>
 
             {record && (
               <button
+                type="button"
                 onClick={() => setEditMode(false)}
                 className="text-xs font-bold text-[#77716D] hover:underline cursor-pointer"
               >
@@ -463,59 +510,144 @@ function DigitalIdPage() {
             )}
           </div>
 
-          <form onSubmit={onSubmit} className="space-y-4">
-            <Field
-              label="Govt Document / Passport Number"
-              value={form.id_number}
-              onChange={setField("id_number")}
-              placeholder="e.g. DEMO-P1234567"
-            />
+          <form onSubmit={onSubmit} className="space-y-5">
+            {/* Identity Group */}
+            <div className="space-y-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#FF6F61]">
+                1. IDENTITY INFORMATION
+              </span>
 
-            <Field
-              label="Trip Destination"
-              value={form.destination}
-              onChange={setField("destination")}
-              placeholder="e.g. Thailand"
-            />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field
+                  label="Full Name"
+                  value={form.fullName}
+                  onChange={setField("fullName")}
+                  placeholder="Enter your full name"
+                />
+                <Field
+                  label="Passport / Citizen ID Number"
+                  value={form.id_number}
+                  onChange={setField("id_number")}
+                  placeholder="e.g. P1234567"
+                />
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field
-                label="Trip Start Date"
-                type="date"
-                value={form.trip_start}
-                onChange={setField("trip_start")}
-              />
-              <Field
-                label="Trip End Date"
-                type="date"
-                value={form.trip_end}
-                onChange={setField("trip_end")}
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Field
+                  label="Nationality"
+                  value={form.nationality}
+                  onChange={setField("nationality")}
+                  placeholder="e.g. Indian, American"
+                  required={false}
+                />
+                <Field
+                  label="Gender"
+                  value={form.gender}
+                  onChange={setField("gender")}
+                  placeholder="Male / Female / Other"
+                  required={false}
+                />
+                <Field
+                  label="Date of Birth"
+                  type="date"
+                  value={form.dob}
+                  onChange={setField("dob")}
+                  required={false}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field
+                  label="Visa Status"
+                  value={form.visa_status}
+                  onChange={setField("visa_status")}
+                  placeholder="e.g. Valid / Tourist Visa / On Arrival"
+                  required={false}
+                />
+                <Field
+                  label="Visa Expiry"
+                  type="date"
+                  value={form.visa_expiry}
+                  onChange={setField("visa_expiry")}
+                  required={false}
+                />
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="h-px bg-black/5" />
+
+            {/* Trip Group */}
+            <div className="space-y-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#FF6F61]">
+                2. TRIP DESTINATION & DURATION
+              </span>
+
               <Field
-                label="Emergency Contact Phone"
-                value={form.emergency_contact}
-                onChange={setField("emergency_contact")}
-                placeholder="+91 90000 00000"
+                label="Destination"
+                value={form.destination}
+                onChange={setField("destination")}
+                placeholder="e.g. Chennai, Tamil Nadu"
               />
-              <Field
-                label="Blood Group (Optional)"
-                value={form.blood_group}
-                onChange={setField("blood_group")}
-                placeholder="e.g. O+"
-                required={false}
-              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field
+                  label="Trip Start Date"
+                  type="date"
+                  value={form.trip_start}
+                  onChange={setField("trip_start")}
+                />
+                <Field
+                  label="Trip End Date"
+                  type="date"
+                  value={form.trip_end}
+                  onChange={setField("trip_end")}
+                />
+              </div>
             </div>
 
-            <div className="pt-2 flex items-center gap-3">
-              <PressButton type="submit" disabled={busy} className="w-full py-3">
+            <div className="h-px bg-black/5" />
+
+            {/* Emergency Group */}
+            <div className="space-y-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#FF6F61]">
+                3. EMERGENCY CONTACT & MEDICAL
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Field
+                  label="Contact Person Name"
+                  value={form.emergency_contact_name}
+                  onChange={setField("emergency_contact_name")}
+                  placeholder="e.g. Parent / Spouse / Guide"
+                  required={false}
+                />
+                <Field
+                  label="Emergency Phone Number"
+                  value={form.emergency_contact}
+                  onChange={setField("emergency_contact")}
+                  placeholder="+91 98765 43210"
+                />
+                <Field
+                  label="Blood Group (Optional)"
+                  value={form.blood_group}
+                  onChange={setField("blood_group")}
+                  placeholder="e.g. O+, A+, B+"
+                  required={false}
+                />
+              </div>
+            </div>
+
+            <div className="pt-3">
+              <PressButton
+                type="submit"
+                disabled={busy}
+                className="w-full py-4 text-sm font-black tracking-wide"
+              >
                 {busy
                   ? "Anchoring Credential…"
                   : record
-                    ? "Re-issue Digital ID"
-                    : "Generate Digital ID"}
+                    ? "SAVE & UPDATE DIGITAL ID"
+                    : "SAVE & CREATE DIGITAL ID"}
               </PressButton>
             </div>
           </form>
@@ -523,7 +655,7 @@ function DigitalIdPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 3. SHOW DIGITAL ID QR MODAL WITH 15-MIN COUNTDOWN & BEACON BRANDING */}
+      {/* 4. SHOW DIGITAL ID QR MODAL WITH 15-MIN COUNTDOWN & BEACON BRANDING */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {qrModalOpen && record && (
@@ -544,11 +676,9 @@ function DigitalIdPage() {
               {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-black/5 pb-3 text-left">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={beaconLogo}
-                    alt="BEACON"
-                    className="h-10 w-10 object-contain drop-shadow-xs"
-                  />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white p-1.5 shadow-xs border border-[#F6B28F]/30 shrink-0">
+                    <img src={beaconLogo} alt="BEACON" className="h-full w-full object-contain" />
+                  </div>
                   <div>
                     <h3 className="text-sm font-black text-[#1E1E1E]">BEACON</h3>
                     <p className="text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
@@ -641,7 +771,7 @@ function DigitalIdPage() {
       </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* 4. RESPONDER VERIFICATION INSPECTION MODAL */}
+      {/* 5. RESPONDER VERIFICATION INSPECTION MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {verifyModalOpen && (
@@ -661,11 +791,9 @@ function DigitalIdPage() {
             >
               <div className="flex items-center justify-between border-b border-black/5 pb-3">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={beaconLogo}
-                    alt="BEACON"
-                    className="h-9 w-9 object-contain drop-shadow-xs"
-                  />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white p-1.5 shadow-xs border border-[#F6B28F]/25 shrink-0">
+                    <img src={beaconLogo} alt="BEACON" className="h-full w-full object-contain" />
+                  </div>
                   <div>
                     <h3 className="text-base font-black text-[#1E1E1E]">BEACON VERIFIED ✓</h3>
                     <p className="text-xs text-[#77716D]">Official Responder Verification</p>

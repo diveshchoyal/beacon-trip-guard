@@ -96,10 +96,10 @@ function ProfilePage() {
       setDocForm({
         docNumber: p?.docNumber || "",
         fullName: p?.fullName || fullName || "",
-        dob: p?.dob || "1998-05-14",
-        nationality: p?.nationality || "Indian",
-        gender: p?.gender || "Male",
-        expiry: p?.expiry || "2032-11-20",
+        dob: p?.dob || "",
+        nationality: p?.nationality || "",
+        gender: p?.gender || "",
+        expiry: p?.expiry || "",
         visaStatus: "",
         destination: "",
         validFrom: "",
@@ -108,15 +108,15 @@ function ProfilePage() {
     } else if (type === "visa") {
       const v = wallet.visa;
       setDocForm({
-        docNumber: "",
+        docNumber: v?.visaNumber || "",
         fullName: fullName || "",
         dob: "",
         nationality: "",
         gender: "",
-        expiry: v?.expiry || "2026-09-30",
-        visaStatus: v?.visaStatus || "Tourist / e-Visa (Active)",
-        destination: v?.destination || "Chennai, Tamil Nadu",
-        validFrom: v?.validFrom || "2026-08-01",
+        expiry: v?.expiry || "",
+        visaStatus: v?.visaStatus || "",
+        destination: v?.destination || "",
+        validFrom: v?.validFrom || "",
         state: "",
       });
     } else if (type === "citizenId") {
@@ -127,11 +127,11 @@ function ProfilePage() {
         dob: "",
         nationality: "",
         gender: "",
-        expiry: c?.expiry || "2030-01-01",
+        expiry: c?.expiry || "",
         visaStatus: "",
         destination: "",
         validFrom: "",
-        state: c?.state || "Tamil Nadu, India",
+        state: c?.state || "",
       });
     }
     setDocModalOpen(true);
@@ -178,34 +178,39 @@ function ProfilePage() {
     e.preventDefault();
     if (!user || !editingDocType) return;
 
+    if (!docForm.docNumber.trim()) {
+      toast.error("Please enter a document reference number.");
+      return;
+    }
+
     const newWallet: DocumentWallet = { ...wallet };
     const now = new Date().toISOString();
 
     if (editingDocType === "passport") {
       newWallet.passport = {
-        docNumber: docForm.docNumber.trim() || "P8291047",
-        fullName: docForm.fullName.trim() || fullName || "Tourist",
+        docNumber: docForm.docNumber.trim(),
+        fullName: docForm.fullName.trim() || fullName || "Traveler",
         dob: docForm.dob,
-        nationality: docForm.nationality.trim() || "Indian",
-        gender: docForm.gender.trim() || "Male",
-        expiry: docForm.expiry || "2032-11-20",
+        nationality: docForm.nationality.trim(),
+        gender: docForm.gender.trim(),
+        expiry: docForm.expiry,
         savedAt: now,
         verified: true,
       };
     } else if (editingDocType === "visa") {
       newWallet.visa = {
-        visaNumber: docForm.docNumber.trim() || "V-IN-829104",
-        visaStatus: docForm.visaStatus.trim() || "Tourist / e-Visa (Active)",
-        destination: docForm.destination.trim() || "Chennai, Tamil Nadu",
-        validFrom: docForm.validFrom || "2026-08-01",
-        expiry: docForm.expiry || "2026-09-30",
+        visaNumber: docForm.docNumber.trim(),
+        visaStatus: docForm.visaStatus.trim() || "Valid",
+        destination: docForm.destination.trim(),
+        validFrom: docForm.validFrom,
+        expiry: docForm.expiry,
         savedAt: now,
       };
     } else if (editingDocType === "citizenId") {
       newWallet.citizenId = {
-        idNumber: docForm.docNumber.trim() || "CID-TN-8291-1094",
-        state: docForm.state.trim() || "Tamil Nadu, India",
-        expiry: docForm.expiry || "2030-01-01",
+        idNumber: docForm.docNumber.trim(),
+        state: docForm.state.trim(),
+        expiry: docForm.expiry,
         savedAt: now,
       };
     }

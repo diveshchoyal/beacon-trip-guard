@@ -45,6 +45,41 @@ export interface DocumentWallet {
 const STORAGE_PREFIX = "beacon_user_documents_";
 
 /**
+ * Generates realistic DEMO document data for development and testing.
+ */
+export function getDemoDocumentWallet(): DocumentWallet {
+  return {
+    passport: {
+      docNumber: "DEMO-P1234567",
+      fullName: "Divesh Choyal",
+      dob: "2007-10-24",
+      nationality: "Indian",
+      gender: "Male",
+      expiry: "2030-10-24",
+      savedAt: new Date().toISOString(),
+      verified: true,
+    },
+    visa: {
+      visaNumber: "DEMO-VISA-2026-001",
+      visaStatus: "Valid",
+      destination: "Thailand",
+      validFrom: "2026-08-22",
+      expiry: "2026-09-30",
+      savedAt: new Date().toISOString(),
+    },
+    citizenId: {
+      idNumber: "DEMO-CITIZEN-001",
+      state: "India",
+      expiry: "2035-01-01",
+      savedAt: new Date().toISOString(),
+    },
+    bloodGroup: "O+",
+    emergencyContactName: "Demo Emergency Contact",
+    emergencyContactPhone: "+91 90000 00000",
+  };
+}
+
+/**
  * Loads the user's saved Document Wallet from localStorage (scoped to user ID)
  */
 export function loadDocumentWallet(userId?: string): DocumentWallet {
@@ -71,12 +106,24 @@ export function saveDocumentWallet(userId: string, wallet: DocumentWallet): void
 }
 
 /**
+ * Clears the user's Document Wallet from localStorage
+ */
+export function clearDocumentWallet(userId: string): void {
+  if (!userId) return;
+  try {
+    localStorage.removeItem(`${STORAGE_PREFIX}${userId}`);
+  } catch (e) {
+    console.error("Failed to clear document wallet:", e);
+  }
+}
+
+/**
  * Intelligent client-side Document Extraction parser.
  * Extracts structured fields from uploaded passport, visa, or citizen ID files.
  */
 export function parseDocumentInfo(
   type: "passport" | "visa" | "citizenId",
-  fileName: string,
+  _fileName: string,
   userFullName?: string,
 ): Partial<PassportDocument & VisaDocument & CitizenIdDocument> {
   const cleanName = userFullName?.trim() || "Divesh Choyal";
@@ -85,37 +132,33 @@ export function parseDocumentInfo(
   const fiveYears = new Date(now.getTime() + 5 * 365 * 24 * 60 * 60 * 1000);
 
   if (type === "passport") {
-    // Generate/parse passport reference format (e.g. Z followed by 7 digits)
-    const randomDigits = Math.floor(1000000 + Math.random() * 9000000);
     return {
-      docNumber: `P${randomDigits}`,
+      docNumber: "DEMO-P1234567",
       fullName: cleanName,
-      dob: "1998-05-14",
+      dob: "2007-10-24",
       nationality: "Indian",
       gender: "Male",
-      expiry: fiveYears.toISOString().slice(0, 10),
+      expiry: "2030-10-24",
       savedAt: now.toISOString(),
       verified: true,
     };
   }
 
   if (type === "visa") {
-    const randomDigits = Math.floor(100000 + Math.random() * 900000);
     return {
-      visaNumber: `V-IN-${randomDigits}`,
-      visaStatus: "Tourist / e-Visa (Active)",
-      destination: "Chennai, Tamil Nadu",
-      validFrom: now.toISOString().slice(0, 10),
-      expiry: nextWeek.toISOString().slice(0, 10),
+      visaNumber: "DEMO-VISA-2026-001",
+      visaStatus: "Valid",
+      destination: "Thailand",
+      validFrom: "2026-08-22",
+      expiry: "2026-09-30",
       savedAt: now.toISOString(),
     };
   }
 
   if (type === "citizenId") {
-    const randomDigits = Math.floor(1000 + Math.random() * 9000);
     return {
-      idNumber: `CID-TN-${randomDigits}-8291`,
-      state: "Tamil Nadu, India",
+      idNumber: "DEMO-CITIZEN-001",
+      state: "India",
       expiry: fiveYears.toISOString().slice(0, 10),
       savedAt: now.toISOString(),
     };

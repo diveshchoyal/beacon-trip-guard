@@ -3,6 +3,8 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { ChevronLeft, Fingerprint, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
+import beaconLogo from "@/assets/beacon-logo.png";
+
 export const Route = createFileRoute("/verify/")({
   head: () => ({
     meta: [
@@ -44,12 +46,17 @@ function VerifyIndexScreen() {
         </div>
 
         <div className="rounded-[36px] border border-[#F6B28F]/35 bg-white p-7 sm:p-8 shadow-xl text-left space-y-6">
-          <div className="flex items-center gap-3 border-b border-black/5 pb-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FF6F61] to-[#F6B28F] text-white shadow-xs">
-              <Fingerprint className="h-6 w-6" />
-            </div>
+          <div className="flex items-center gap-4 border-b border-black/5 pb-4">
+            <img
+              src={beaconLogo}
+              alt="BEACON"
+              className="h-14 w-14 object-contain drop-shadow-md shrink-0"
+            />
             <div>
-              <h1 className="text-lg font-black text-[#1E1E1E]">Verify Digital ID</h1>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6F61] block">
+                BEACON
+              </span>
+              <h1 className="text-lg font-black text-[#1E1E1E]">VERIFY DIGITAL ID</h1>
               <p className="text-xs text-[#77716D]">Tamper-evident credential lookup</p>
             </div>
           </div>

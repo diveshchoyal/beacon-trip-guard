@@ -5,39 +5,39 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertTriangle,
   Calendar,
   CheckCircle2,
-  ChevronRight,
   Clock,
-  Eye,
   FileCheck,
   Fingerprint,
   Globe,
   HeartPulse,
-  IdCard,
-  Lock,
   MapPin,
   PhoneCall,
   QrCode,
   RefreshCw,
-  Shield,
   ShieldAlert,
   ShieldCheck,
   ShieldX,
   Sparkles,
   User,
   X,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import beaconLogo from "@/assets/beacon-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { GlassCard, PressButton } from "@/components/ui/glass";
 import { Field } from "@/routes/login";
 import { generateDigitalId, verifyDigitalId } from "@/lib/digital-id.functions";
-import { loadDocumentWallet, type DocumentWallet } from "@/lib/documents.types";
+import {
+  loadDocumentWallet,
+  saveDocumentWallet,
+  clearDocumentWallet,
+  getDemoDocumentWallet,
+  type DocumentWallet,
+} from "@/lib/documents.types";
 
 export const Route = createFileRoute("/_authenticated/app/id")({
   component: DigitalIdPage,
@@ -62,10 +62,10 @@ function DigitalIdPage() {
   // Digital ID Form State
   const [form, setForm] = useState({
     id_number: "",
-    destination: "Chennai, Tamil Nadu",
-    trip_start: new Date().toISOString().slice(0, 10),
-    trip_end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    emergency_contact: "+91 98765 43210",
+    destination: "Thailand",
+    trip_start: "2026-08-22",
+    trip_end: "2026-08-31",
+    emergency_contact: "+91 90000 00000",
     blood_group: "O+",
   });
 
@@ -102,26 +102,32 @@ function DigitalIdPage() {
   // Auto-fill from My Documents on load
   useEffect(() => {
     if (user?.id) {
-      const docWallet = loadDocumentWallet(user.id);
+      let docWallet = loadDocumentWallet(user.id);
+
+      // If completely empty on first visit, load demo document template
+      if (!docWallet.passport && !docWallet.visa) {
+        docWallet = getDemoDocumentWallet();
+        saveDocumentWallet(user.id, docWallet);
+      }
+
       setWallet(docWallet);
 
-      // Auto-populate form if not populated yet
+      // Auto-populate form fields from saved wallet
       const passportNum = docWallet.passport?.docNumber || "";
       const citizenNum = docWallet.citizenId?.idNumber || "";
-      const dest = docWallet.visa?.destination || "Chennai, Tamil Nadu";
-      const start = docWallet.visa?.validFrom || new Date().toISOString().slice(0, 10);
-      const end =
-        docWallet.visa?.expiry ||
-        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const contact = docWallet.emergencyContactPhone || profile?.phone || "+91 98765 43210";
+      const dest = docWallet.visa?.destination || "Thailand";
+      const start = docWallet.visa?.validFrom || "2026-08-22";
+      const end = docWallet.visa?.expiry || "2026-08-31";
+      const contact = docWallet.emergencyContactPhone || profile?.phone || "+91 90000 00000";
 
       setForm((prev) => ({
         ...prev,
-        id_number: prev.id_number || passportNum || citizenNum || "P8291047",
+        id_number: prev.id_number || passportNum || citizenNum || "DEMO-P1234567",
         destination: prev.destination || dest,
         trip_start: prev.trip_start || start,
         trip_end: prev.trip_end || end,
         emergency_contact: prev.emergency_contact || contact,
+        blood_group: prev.blood_group || docWallet.bloodGroup || "O+",
       }));
     }
   }, [user, profile]);
@@ -151,6 +157,29 @@ function DigitalIdPage() {
     setQrModalOpen(true);
   };
 
+  const handleLoadDemo = () => {
+    if (!user) return;
+    const demo = getDemoDocumentWallet();
+    setWallet(demo);
+    saveDocumentWallet(user.id, demo);
+    setForm({
+      id_number: demo.passport?.docNumber || "DEMO-P1234567",
+      destination: demo.visa?.destination || "Thailand",
+      trip_start: demo.visa?.validFrom || "2026-08-22",
+      trip_end: "2026-08-31",
+      emergency_contact: demo.emergencyContactPhone || "+91 90000 00000",
+      blood_group: demo.bloodGroup || "O+",
+    });
+    toast.success("Loaded realistic Demo Documents (Divesh Choyal · Thailand trip)!");
+  };
+
+  const handleClearDemo = () => {
+    if (!user) return;
+    clearDocumentWallet(user.id);
+    setWallet({});
+    toast.info("Cleared document wallet");
+  };
+
   const setField = (key: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
 
   // Issue / Generate Digital ID
@@ -160,11 +189,11 @@ function DigitalIdPage() {
     try {
       await generate({
         data: {
-          id_number: form.id_number.trim() || "P8291047",
-          destination: form.destination.trim() || "Chennai, Tamil Nadu",
+          id_number: form.id_number.trim() || "DEMO-P1234567",
+          destination: form.destination.trim() || "Thailand",
           trip_start: form.trip_start,
           trip_end: form.trip_end,
-          emergency_contact: form.emergency_contact.trim() || "+91 98765 43210",
+          emergency_contact: form.emergency_contact.trim() || "+91 90000 00000",
         },
       });
       toast.success("BEACON Digital ID issued and anchored to tamper-evident ledger.");
@@ -217,30 +246,44 @@ function DigitalIdPage() {
   return (
     <div className="space-y-6 text-[#1E1E1E]">
       {/* ========================================================================= */}
-      {/* 1. DIGITAL ID HEADER BANNER */}
+      {/* 1. BEACON DIGITAL ID HEADER WITH PROMINENT BRANDING */}
       {/* ========================================================================= */}
-      <div className="rounded-[32px] border border-[#F6B28F]/30 bg-gradient-to-br from-white via-[#FFF8F3] to-[#FFF1EA] p-6 sm:p-8 shadow-[0_12px_40px_rgba(255,111,97,0.06)] text-left">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-[#39B86B]/15 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-[#39B86B]">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span>Identity Verified</span>
+      <div className="rounded-[36px] border border-[#F6B28F]/35 bg-gradient-to-br from-white via-[#FFF8F3] to-[#FFF1EA] p-6 sm:p-8 shadow-[0_16px_45px_rgba(255,111,97,0.08)] text-left">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          {/* Logo & Main Title */}
+          <div className="flex items-center gap-4 sm:gap-5">
+            <img
+              src={beaconLogo}
+              alt="BEACON"
+              className="h-16 w-16 sm:h-20 sm:w-20 object-contain drop-shadow-md shrink-0"
+            />
+            <div>
+              <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.25em] text-[#FF6F61] block">
+                BEACON
+              </span>
+              <h1 className="mt-0.5 text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-[#1E1E1E]">
+                VERIFIED TOURIST DIGITAL ID
+              </h1>
+              <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[#39B86B]/15 px-3 py-0.5 text-xs font-black uppercase tracking-wide text-[#39B86B]">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Identity Verified</span>
+              </div>
             </div>
-
-            <h1 className="mt-2.5 text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-[#1E1E1E]">
-              BEACON Digital ID
-            </h1>
-            <p className="mt-1 text-xs sm:text-sm font-medium text-[#77716D]">
-              Tamper-evident blockchain tourist credential for checkpoints, hotel check-ins, and
-              emergency response.
-            </p>
           </div>
 
-          {/* Quick Actions */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Top Actions & Demo Toggle */}
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-center shrink-0">
+            <button
+              type="button"
+              onClick={handleLoadDemo}
+              className="flex items-center gap-1.5 rounded-2xl bg-white border border-[#F6B28F]/40 px-3.5 py-2 text-xs font-black text-[#FF6F61] hover:bg-[#FF6F61] hover:text-white transition-colors shadow-2xs cursor-pointer"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>⚡ Load Demo Data</span>
+            </button>
             <Link
               to="/app/profile"
-              className="flex items-center gap-1.5 rounded-2xl bg-white border border-[#F6B28F]/40 px-3.5 py-2.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FFF8F3] transition-colors shadow-2xs"
+              className="flex items-center gap-1.5 rounded-2xl bg-white border border-[#F6B28F]/40 px-3.5 py-2 text-xs font-bold text-[#1E1E1E] hover:bg-[#FFF8F3] transition-colors shadow-2xs"
             >
               <FileCheck className="h-4 w-4 text-[#FF6F61]" />
               <span>My Documents</span>
@@ -250,45 +293,21 @@ function DigitalIdPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. AUTO-FILL NOTICE BANNER */}
-      {/* ========================================================================= */}
-      {!wallet.passport && !wallet.visa && (
-        <div className="rounded-2xl border border-[#F6B28F]/30 bg-[#FFF8F3] p-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#FF6F61]/15 text-[#FF6F61] shrink-0">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            <div>
-              <p className="text-xs font-black text-[#1E1E1E]">⚡ 1-Click Auto-Fill Available</p>
-              <p className="text-[11px] text-[#77716D]">
-                Save your Passport and Visa in Profile $\rightarrow$ My Documents to automatically
-                populate your Digital ID credentials.
-              </p>
-            </div>
-          </div>
-          <Link
-            to="/app/profile"
-            className="rounded-xl bg-white border border-[#F6B28F]/40 px-3 py-1.5 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61] hover:text-white transition-colors self-start sm:self-center shrink-0"
-          >
-            Add Documents
-          </Link>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 3. DIGITAL ID CREDENTIAL CARD (MINIMAL, CLEAN UI) */}
+      {/* 2. DIGITAL ID CREDENTIAL CARD (MINIMAL, CLEAN UI) */}
       {/* ========================================================================= */}
       {record && !editMode ? (
         <div className="rounded-[36px] border border-[#F6B28F]/35 bg-white/95 p-6 sm:p-8 shadow-[0_16px_50px_rgba(255,111,97,0.08)] backdrop-blur-md text-left space-y-6">
           {/* Top Bar: Pass Type + Verified Badge */}
           <div className="flex items-center justify-between border-b border-black/5 pb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#FF6F61] to-[#F6B28F] text-white shadow-xs">
-                <Fingerprint className="h-5 w-5" />
-              </div>
+            <div className="flex items-center gap-3">
+              <img
+                src={beaconLogo}
+                alt="BEACON"
+                className="h-10 w-10 object-contain drop-shadow-xs"
+              />
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D] block">
-                  BEACON VERIFIED TOURIST ID
+                  BEACON OFFICIAL CREDENTIAL
                 </span>
                 <span className="text-xs font-black text-[#1E1E1E] font-mono">
                   {record.digital_id}
@@ -298,14 +317,14 @@ function DigitalIdPage() {
 
             <span className="inline-flex items-center gap-1 rounded-full bg-[#39B86B]/15 px-3 py-1 text-xs font-black text-[#39B86B]">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Identity Verified</span>
+              <span>✓ Identity Verified</span>
             </span>
           </div>
 
           {/* Section 1: IDENTITY */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F6B28F] to-[#FF6F61] text-white font-black text-2xl shadow-md shadow-[#FF6F61]/25">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F6B28F] to-[#FF6F61] text-white font-black text-2xl shadow-md shadow-[#FF6F61]/25 shrink-0">
                 {touristName.charAt(0).toUpperCase()}
               </div>
 
@@ -422,13 +441,16 @@ function DigitalIdPage() {
         /* Digital ID Form / Issuance Mode */
         <div className="rounded-[36px] border border-[#F6B28F]/35 bg-white/95 p-6 sm:p-8 shadow-sm text-left space-y-5">
           <div className="flex items-center justify-between border-b border-black/5 pb-3">
-            <div>
-              <h2 className="text-lg font-black text-[#1E1E1E]">
-                {record ? "Update Your Digital ID" : "Issue BEACON Digital ID"}
-              </h2>
-              <p className="text-xs text-[#77716D]">
-                Information is verified and anchored with cryptographic tamper evidence.
-              </p>
+            <div className="flex items-center gap-3">
+              <img src={beaconLogo} alt="BEACON" className="h-9 w-9 object-contain" />
+              <div>
+                <h2 className="text-lg font-black text-[#1E1E1E]">
+                  {record ? "Update Your Digital ID" : "Issue BEACON Digital ID"}
+                </h2>
+                <p className="text-xs text-[#77716D]">
+                  Information is verified and anchored with cryptographic tamper evidence.
+                </p>
+              </div>
             </div>
 
             {record && (
@@ -446,14 +468,14 @@ function DigitalIdPage() {
               label="Govt Document / Passport Number"
               value={form.id_number}
               onChange={setField("id_number")}
-              placeholder="e.g. P8291047"
+              placeholder="e.g. DEMO-P1234567"
             />
 
             <Field
               label="Trip Destination"
               value={form.destination}
               onChange={setField("destination")}
-              placeholder="e.g. Chennai, Tamil Nadu"
+              placeholder="e.g. Thailand"
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -476,7 +498,7 @@ function DigitalIdPage() {
                 label="Emergency Contact Phone"
                 value={form.emergency_contact}
                 onChange={setField("emergency_contact")}
-                placeholder="+91 98765 43210"
+                placeholder="+91 90000 00000"
               />
               <Field
                 label="Blood Group (Optional)"
@@ -501,7 +523,7 @@ function DigitalIdPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 4. SHOW DIGITAL ID QR MODAL WITH 15-MIN COUNTDOWN */}
+      {/* 3. SHOW DIGITAL ID QR MODAL WITH 15-MIN COUNTDOWN & BEACON BRANDING */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {qrModalOpen && record && (
@@ -521,10 +543,12 @@ function DigitalIdPage() {
             >
               {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-black/5 pb-3 text-left">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#FF6F61] to-[#F6B28F] text-white">
-                    <Fingerprint className="h-4 w-4" />
-                  </div>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={beaconLogo}
+                    alt="BEACON"
+                    className="h-10 w-10 object-contain drop-shadow-xs"
+                  />
                   <div>
                     <h3 className="text-sm font-black text-[#1E1E1E]">BEACON</h3>
                     <p className="text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
@@ -595,17 +619,15 @@ function DigitalIdPage() {
                 </div>
               )}
 
-              {/* Close & Test Verification Links */}
+              {/* Link to Verification View */}
               <div className="flex items-center gap-2 pt-1">
-                <button
-                  onClick={() => {
-                    setQrModalOpen(false);
-                    void onVerifyIntegrity();
-                  }}
-                  className="flex-1 rounded-2xl bg-[#FFF8F3] border border-[#F6B28F]/30 py-2.5 text-xs font-bold text-[#1E1E1E] hover:bg-white transition-colors cursor-pointer"
+                <Link
+                  to="/verify/$id"
+                  params={{ id: record.digital_id }}
+                  className="flex-1 rounded-2xl bg-[#FFF8F3] border border-[#F6B28F]/30 py-2.5 text-xs font-bold text-[#1E1E1E] hover:bg-white transition-colors text-center cursor-pointer"
                 >
                   Inspect Verification View
-                </button>
+                </Link>
                 <button
                   onClick={() => setQrModalOpen(false)}
                   className="flex-1 rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] py-2.5 text-xs font-black text-white shadow-md transition-all cursor-pointer"
@@ -619,7 +641,7 @@ function DigitalIdPage() {
       </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* 5. RESPONDER VERIFICATION INSPECTION MODAL */}
+      {/* 4. RESPONDER VERIFICATION INSPECTION MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {verifyModalOpen && (
@@ -638,10 +660,12 @@ function DigitalIdPage() {
               className="fixed inset-x-4 top-[12%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-lg rounded-[36px] border border-[#F6B28F]/40 bg-white p-7 text-left shadow-2xl space-y-4"
             >
               <div className="flex items-center justify-between border-b border-black/5 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#39B86B]/15 text-[#39B86B]">
-                    <ShieldCheck className="h-5 w-5" />
-                  </span>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={beaconLogo}
+                    alt="BEACON"
+                    className="h-9 w-9 object-contain drop-shadow-xs"
+                  />
                   <div>
                     <h3 className="text-base font-black text-[#1E1E1E]">BEACON VERIFIED ✓</h3>
                     <p className="text-xs text-[#77716D]">Official Responder Verification</p>

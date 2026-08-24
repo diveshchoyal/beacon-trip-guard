@@ -227,6 +227,21 @@ function ProfilePage() {
     toast.info("Document removed from wallet");
   };
 
+  const handleLoadDemo = () => {
+    if (!user) return;
+    const demo = getDemoDocumentWallet();
+    setWallet(demo);
+    saveDocumentWallet(user.id, demo);
+    toast.success("Loaded realistic Demo Documents (Passport, Visa, Citizen ID)!");
+  };
+
+  const handleClearDemo = () => {
+    if (!user) return;
+    clearDocumentWallet(user.id);
+    setWallet({});
+    toast.info("Cleared all saved documents from wallet");
+  };
+
   return (
     <div className="space-y-6 text-[#1E1E1E]">
       {/* ========================================================================= */}
@@ -250,13 +265,15 @@ function ProfilePage() {
             </div>
           </div>
 
-          <Link
-            to="/app/id"
-            className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] px-4 py-2.5 text-xs font-black text-white shadow-md shadow-[#FF6F61]/25 hover:shadow-lg transition-all self-start sm:self-center"
-          >
-            <Fingerprint className="h-4 w-4" />
-            <span>View Digital ID</span>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+            <Link
+              to="/app/id"
+              className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] px-4 py-2.5 text-xs font-black text-white shadow-md shadow-[#FF6F61]/25 hover:shadow-lg transition-all"
+            >
+              <Fingerprint className="h-4 w-4" />
+              <span>View Digital ID</span>
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -264,7 +281,7 @@ function ProfilePage() {
       {/* 2. MY DOCUMENTS SECTION (DOCUMENT WALLET) */}
       {/* ========================================================================= */}
       <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-6 shadow-sm text-left space-y-4">
-        <div className="flex items-center justify-between border-b border-black/5 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-black/5 pb-3">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#FF6F61]/15 text-[#FF6F61]">
@@ -277,9 +294,26 @@ function ProfilePage() {
             </p>
           </div>
 
-          <span className="text-[10px] font-black text-[#39B86B] bg-[#39B86B]/15 px-2.5 py-1 rounded-full uppercase">
-            Encrypted Wallet
-          </span>
+          {/* Demo Data Quick Buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLoadDemo}
+              className="flex items-center gap-1.5 rounded-xl bg-[#FFF8F3] border border-[#F6B28F]/40 px-3 py-1.5 text-xs font-black text-[#FF6F61] hover:bg-[#FF6F61] hover:text-white transition-colors cursor-pointer shadow-2xs"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>⚡ Load Demo Docs</span>
+            </button>
+            {wallet.passport && (
+              <button
+                type="button"
+                onClick={handleClearDemo}
+                className="rounded-xl bg-black/5 px-2.5 py-1.5 text-[11px] font-bold text-[#77716D] hover:bg-[#E94B5F]/15 hover:text-[#E94B5F] transition-colors cursor-pointer"
+              >
+                Clear Docs
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Compact Document Cards Grid */}

@@ -17,6 +17,7 @@ import {
   User,
 } from "lucide-react";
 
+import beaconLogo from "@/assets/beacon-logo.png";
 import { supabase } from "@/integrations/supabase/client";
 import { GlassCard, PressButton } from "@/components/ui/glass";
 
@@ -110,7 +111,7 @@ function VerifyDigitalIdScreen() {
             ? "Record cryptographic hash matches the tamper-evident ledger anchor."
             : "Hash mismatch detected. Record may have been modified outside the authorized ledger.",
           touristName:
-            (record.profiles as { full_name?: string } | null)?.full_name || "Verified Traveler",
+            (record.profiles as { full_name?: string } | null)?.full_name || "Divesh Choyal",
           destination: record.destination,
           tripStart: record.trip_start,
           tripEnd: record.trip_end,
@@ -134,7 +135,7 @@ function VerifyDigitalIdScreen() {
   return (
     <main className="min-h-screen bg-[#FDFBF7] px-4 py-8 flex flex-col items-center justify-center text-[#1E1E1E]">
       <div className="w-full max-w-md space-y-5">
-        {/* Top Header */}
+        {/* Top Navigation */}
         <div className="flex items-center justify-between">
           <Link
             to="/app/id"
@@ -144,19 +145,24 @@ function VerifyDigitalIdScreen() {
             <span>Back to App</span>
           </Link>
           <span className="text-xs font-black tracking-widest text-[#FF6F61] uppercase">
-            BEACON SAFETY SYSTEM
+            BEACON VERIFIER
           </span>
         </div>
 
-        {/* Verification Card */}
+        {/* Verification Card with Prominent Logo */}
         <div className="rounded-[36px] border border-[#F6B28F]/35 bg-white p-7 sm:p-8 shadow-xl text-left space-y-6">
           <div className="flex items-center justify-between border-b border-black/5 pb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FF6F61] to-[#F6B28F] text-white shadow-xs">
-                <Fingerprint className="h-5 w-5" />
-              </div>
+            <div className="flex items-center gap-3">
+              <img
+                src={beaconLogo}
+                alt="BEACON"
+                className="h-12 w-12 object-contain drop-shadow-md shrink-0"
+              />
               <div>
-                <h1 className="text-base font-black text-[#1E1E1E]">Official Verification</h1>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FF6F61] block">
+                  BEACON
+                </span>
+                <h1 className="text-base font-black text-[#1E1E1E]">VERIFIED DIGITAL ID</h1>
                 <p className="text-xs font-mono font-bold text-[#77716D]">{id}</p>
               </div>
             </div>
@@ -166,12 +172,12 @@ function VerifyDigitalIdScreen() {
             ) : result?.valid ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-[#39B86B]/15 px-3 py-1 text-xs font-black text-[#39B86B]">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Verified ✓</span>
+                <span>VALID ✓</span>
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 rounded-full bg-[#E94B5F]/15 px-3 py-1 text-xs font-black text-[#E94B5F]">
                 <ShieldX className="h-3.5 w-3.5" />
-                <span>Invalid ✕</span>
+                <span>INVALID ✕</span>
               </span>
             )}
           </div>
@@ -200,8 +206,8 @@ function VerifyDigitalIdScreen() {
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-[#77716D] font-bold">Verification Status:</span>
-                  <span className="font-black text-[#39B86B]">Official Tourist Pass</span>
+                  <span className="text-[#77716D] font-bold">Identity Status:</span>
+                  <span className="font-black text-[#39B86B]">✓ Verified</span>
                 </div>
 
                 <div className="flex justify-between items-center">
@@ -210,7 +216,7 @@ function VerifyDigitalIdScreen() {
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-[#77716D] font-bold">Travel Validity:</span>
+                  <span className="text-[#77716D] font-bold">Trip Duration:</span>
                   <span className="font-bold text-[#1E1E1E]">
                     {result.tripStart} → {result.tripEnd}
                   </span>

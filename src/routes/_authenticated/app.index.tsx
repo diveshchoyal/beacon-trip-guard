@@ -32,7 +32,7 @@ import logo from "@/assets/beacon-logo.png";
 import mascotImg from "@/assets/tourist-mascot-v2.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useGeolocation, inZone, distanceMeters, LOCATION_PRESETS } from "@/hooks/use-geolocation";
+import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";
 import { useCrowdX } from "@/hooks/use-crowdx";
 import {
   COMPREHENSIVE_POLICE_STATIONS,
@@ -68,24 +68,21 @@ function TouristHome() {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
-  // Central Authoritative Location State
+  // Central Authoritative Location State (Single Source of Truth)
   const {
     effective,
     coords,
     accuracy,
     error: geoError,
     geoStatus,
-    isManual,
     locationTitle,
     locationSublabel,
     cityArea,
     stateCountry,
     requestLocation,
-    setCustomLocation,
   } = useGeolocation();
 
   // Local state
-  const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [sendingSos, setSendingSos] = useState(false);
   const [sosSent, setSosSent] = useState(false);
   const [safetyTipsOpen, setSafetyTipsOpen] = useState(false);
@@ -552,7 +549,7 @@ function TouristHome() {
         <div className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-gradient-to-tr from-[#F6B28F]/15 to-[#FF6F61]/10 blur-3xl" />
 
         <div className="relative grid grid-cols-1 lg:grid-cols-12 items-center gap-8 lg:gap-6">
-          {/* Left Column: Personalized Greeting + Dynamic Status & Current Location (5 Cols) */}
+          {/* Left Column: Personalized Greeting + Dynamic Status (5 Cols) */}
           <div className="lg:col-span-5 space-y-5 text-left">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-[#FF6F61]/10 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-[#FF6F61] border border-[#FF6F61]/20">
@@ -572,72 +569,35 @@ function TouristHome() {
               </p>
             </div>
 
-            {/* Prominent Current Location Card (Live Device GPS + Reverse Geocoded) */}
-            <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 sm:p-5 shadow-[0_8px_25px_rgba(255,111,97,0.06)] backdrop-blur-md">
-              <div className="flex items-center justify-between gap-2 border-b border-black/5 pb-2.5">
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D] flex items-center gap-1.5">
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      geoStatus === "success"
-                        ? "bg-[#39B86B] animate-ping"
-                        : geoStatus === "locating"
-                          ? "bg-[#F2A93B] animate-pulse"
-                          : "bg-[#77716D]"
-                    }`}
-                  />
-                  CURRENT LOCATION
-                </span>
+            {/* Quick Status Pill + Safety Tips Trigger */}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <div className="flex items-center gap-2 rounded-2xl bg-white/90 border border-[#F6B28F]/30 px-3.5 py-2 text-xs font-bold text-[#1E1E1E] shadow-sm">
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                  className={`h-2.5 w-2.5 rounded-full ${
                     risk === "restricted"
-                      ? "bg-[#E94B5F]/15 text-[#E94B5F]"
+                      ? "bg-[#E94B5F]"
                       : risk === "caution"
-                        ? "bg-[#F2A93B]/15 text-[#F2A93B]"
-                        : "bg-[#39B86B]/15 text-[#39B86B]"
+                        ? "bg-[#F2A93B]"
+                        : "bg-[#39B86B] animate-pulse"
                   }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      risk === "restricted"
-                        ? "bg-[#E94B5F]"
-                        : risk === "caution"
-                          ? "bg-[#F2A93B]"
-                          : "bg-[#39B86B]"
-                    }`}
-                  />
+                />
+                <span>
                   {risk === "restricted"
-                    ? "Restricted Zone"
+                    ? "Restricted Area"
                     : risk === "caution"
-                      ? "Caution Zone"
-                      : "Safe Zone"}
+                      ? "Caution Area"
+                      : "Safe Area Zone"}
                 </span>
               </div>
 
-              <div className="mt-3 flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#FF6F61]/10 text-[#FF6F61]">
-                  <MapPin className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="truncate text-sm sm:text-base font-black text-[#1E1E1E]"
-                    title={locationTitle}
-                  >
-                    {locationTitle}
-                  </p>
-                  <p className="mt-0.5 text-xs text-[#77716D] truncate">{locationSublabel}</p>
-                </div>
-              </div>
-
-              {/* Location fallback button if permission not granted or GPS signal needs refresh */}
-              {geoStatus !== "success" && (
-                <button
-                  onClick={requestLocation}
-                  className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-xl bg-[#FF6F61]/10 py-1.5 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-colors cursor-pointer"
-                >
-                  <Radio className="h-3.5 w-3.5 animate-pulse" />
-                  <span>{geoStatus === "denied" ? "Enable Location" : "Refresh GPS Signal"}</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setSafetyTipsOpen(true)}
+                className="flex items-center gap-1.5 rounded-2xl bg-[#FF6F61]/10 border border-[#FF6F61]/20 px-3.5 py-2 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-all cursor-pointer"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Safety Tips</span>
+              </button>
             </div>
           </div>
 
@@ -748,7 +708,7 @@ function TouristHome() {
             </div>
           </div>
 
-          {/* Right Column: Floating Live Location & Coordinates Card (3 Cols) */}
+          {/* Right Column: Single Unified Live Location & Coordinates Card (3 Cols) */}
           <div className="lg:col-span-3 flex flex-col justify-center">
             <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-5 shadow-[0_10px_30px_rgba(255,111,97,0.08)] backdrop-blur-md space-y-4">
               <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
@@ -765,21 +725,7 @@ function TouristHome() {
                     <RefreshCw className="h-2.5 w-2.5" />
                     <span>Refresh</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setLocationModalOpen(true)}
-                    className="flex items-center gap-1 text-[10px] font-bold text-[#4B7BF5] hover:underline cursor-pointer"
-                    title="Calibrate / select test location"
-                  >
-                    <MapPin className="h-2.5 w-2.5" />
-                    <span>Set</span>
-                  </button>
-                  {isManual ? (
-                    <span className="flex items-center gap-1 text-[10px] font-black text-[#4B7BF5] uppercase tracking-wider">
-                      <span className="h-2 w-2 rounded-full bg-[#4B7BF5]" />
-                      PINNED
-                    </span>
-                  ) : geoStatus === "success" ? (
+                  {geoStatus === "success" ? (
                     <span className="flex items-center gap-1 text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
                       <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
                       LIVE GPS
@@ -829,9 +775,7 @@ function TouristHome() {
                 </div>
                 {typeof accuracy === "number" && (
                   <p className="text-[10px] text-right font-medium text-[#77716D] pr-1">
-                    {isManual
-                      ? "Manual override active"
-                      : `GPS Accuracy: ±${Math.round(accuracy)}m`}
+                    GPS Accuracy: ±{Math.round(accuracy)}m
                   </p>
                 )}
               </div>
@@ -1179,141 +1123,6 @@ function TouristHome() {
                 className="mt-5 w-full rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] py-2.5 text-xs font-black text-white shadow-md shadow-[#FF6F61]/25 hover:shadow-lg cursor-pointer"
               >
                 Got It, Stay Safe
-              </button>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ========================================================================= */}
-      {/* 7. LOCATION CALIBRATION & PRESET SELECTION MODAL */}
-      {/* ========================================================================= */}
-      <AnimatePresence>
-        {locationModalOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setLocationModalOpen(false)}
-              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 15 }}
-              className="fixed inset-x-4 top-[10%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-md rounded-[32px] border border-[#F6B28F]/40 bg-white p-6 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-black/5 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#4B7BF5]/15 text-[#4B7BF5]">
-                    <MapPin className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h3 className="text-base font-black text-[#1E1E1E]">Location Calibration</h3>
-                    <p className="text-xs text-[#77716D]">
-                      Select live GPS or calibrate your exact neighborhood
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setLocationModalOpen(false)}
-                  className="rounded-full p-1.5 text-[#77716D] hover:bg-black/5 cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              {/* Automatic Live GPS Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setCustomLocation(null);
-                  requestLocation();
-                  setLocationModalOpen(false);
-                  toast.success("Switched to Live Hardware GPS tracking");
-                }}
-                className={`w-full flex items-center justify-between p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
-                  !isManual
-                    ? "border-[#39B86B] bg-[#E8F8EE] shadow-sm"
-                    : "border-black/5 bg-[#FFF8F3] hover:bg-[#FFF2EB]"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#39B86B]/15 text-[#39B86B]">
-                    <Radio className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <p className="text-xs font-black text-[#1E1E1E] flex items-center gap-1.5">
-                      Live Hardware GPS (Automatic)
-                      {!isManual && (
-                        <span className="text-[10px] font-bold text-[#39B86B] bg-[#39B86B]/15 px-1.5 py-0.5 rounded-full">
-                          ACTIVE
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-[11px] text-[#77716D]">
-                      Reads continuously from device GPS satellite chip
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-[#77716D]" />
-              </button>
-
-              {/* Presets List */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#77716D]">
-                  POPULAR CHENNAI LOCATIONS
-                </p>
-                <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-                  {LOCATION_PRESETS.map((preset) => {
-                    const isSelected =
-                      isManual &&
-                      Math.abs(effective.lat - preset.coords.lat) < 0.001 &&
-                      Math.abs(effective.lng - preset.coords.lng) < 0.001;
-
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => {
-                          setCustomLocation(preset.coords);
-                          setLocationModalOpen(false);
-                          toast.success(`Location set to ${preset.name}`);
-                        }}
-                        className={`w-full flex items-center justify-between p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                          isSelected
-                            ? "border-[#4B7BF5] bg-[#EEF4FF] shadow-sm"
-                            : "border-black/5 bg-[#FFF8F3] hover:bg-[#FFF2EB]"
-                        }`}
-                      >
-                        <div>
-                          <p className="text-xs font-bold text-[#1E1E1E] flex items-center gap-1.5">
-                            {preset.name}
-                            {isSelected && (
-                              <span className="text-[10px] font-bold text-[#4B7BF5] bg-[#4B7BF5]/15 px-1.5 py-0.5 rounded-full">
-                                ACTIVE
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-[11px] text-[#77716D]">
-                            {preset.area}, Chennai {preset.pincode} • {preset.coords.lat.toFixed(4)}
-                            ° N, {preset.coords.lng.toFixed(4)}° E
-                          </p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-[#77716D]" />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setLocationModalOpen(false)}
-                className="w-full rounded-2xl border border-black/10 py-2.5 text-xs font-bold text-[#77716D] hover:bg-black/5 cursor-pointer"
-              >
-                Close
               </button>
             </motion.div>
           </>

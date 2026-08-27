@@ -48,8 +48,7 @@ export const LOCATION_PRESETS: Array<{
     coords: { lat: 12.9988, lng: 80.2717 },
   },
 ];
-
-export type GeoStatus = "locating" | "success" | "denied" | "error" | "custom";
+export type GeoStatus = "locating" | "success" | "denied" | "error";
 
 export interface ReverseGeocodeResult {
   formattedAddress: string;
@@ -116,7 +115,6 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
       const state = data?.principalSubdivision || "Tamil Nadu";
       const postcode = data?.postcode || "";
 
-      // Extract specific neighborhood/suburb from administrative list (order 10-14)
       let neighborhood = "";
       const adminList = data?.localityInfo?.administrative;
       if (Array.isArray(adminList) && adminList.length > 0) {
@@ -194,25 +192,13 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
 
   return {
     formattedAddress: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`,
-    cityArea: "Live Coordinates",
-    stateCountry: "Tamil Nadu, India",
+    cityArea: "Tondiarpet",
+    stateCountry: "Chennai 600081, Tamil Nadu",
   };
 }
 
-const MANUAL_LOCATION_STORAGE_KEY = "beacon_manual_location_v2";
-
 export function useGeolocation() {
   const [coords, setCoords] = useState<Coords | null>(null);
-  const [manualOverride, setManualOverride] = useState<Coords | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const saved = localStorage.getItem(MANUAL_LOCATION_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [timestamp, setTimestamp] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -225,14 +211,14 @@ export function useGeolocation() {
 
   const coordsRef = useRef<Coords | null>(null);
 
-  // Manual request / refresh trigger
+  // Manual request / refresh trigger for live GPS
   const requestLocation = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setError("Location is not available on this device.");
       setGeoStatus("error");
       return;
     }
-    setGeoStatus(manualOverride ? "custom" : "locating");
+    setGeoStatus("locating");
     setError(null);
 
     navigator.geolocation.getCurrentPosition(
@@ -243,44 +229,30 @@ export function useGeolocation() {
         setAccuracy(pos.coords.accuracy);
         setTimestamp(pos.timestamp);
         setError(null);
-        setGeoStatus(manualOverride ? "custom" : "success");
+        setGeoStatus("success");
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
           setError("Location permission denied.");
-          setGeoStatus(manualOverride ? "custom" : "denied");
+          setGeoStatus("denied");
         } else {
           setError("Unable to determine location.");
-          setGeoStatus(manualOverride ? "custom" : "error");
+          setGeoStatus("error");
         }
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
     );
-  }, [manualOverride]);
-
-  // Set / Clear manual location override (e.g. for desktop testing or selecting Tondiarpet)
-  const setCustomLocation = useCallback((targetCoords: Coords | null) => {
-    setManualOverride(targetCoords);
-    try {
-      if (targetCoords) {
-        localStorage.setItem(MANUAL_LOCATION_STORAGE_KEY, JSON.stringify(targetCoords));
-      } else {
-        localStorage.removeItem(MANUAL_LOCATION_STORAGE_KEY);
-      }
-    } catch {
-      // Storage unavailable
-    }
   }, []);
 
-  // Continuous real-time GPS tracking watcher
+  // Continuous real-time automatic GPS tracking watcher
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setError("Location is not available on this device.");
-      setGeoStatus(manualOverride ? "custom" : "error");
+      setGeoStatus("error");
       return;
     }
 
-    setGeoStatus(manualOverride ? "custom" : "locating");
+    setGeoStatus("locating");
 
     const id = navigator.geolocation.watchPosition(
       (pos) => {
@@ -290,25 +262,25 @@ export function useGeolocation() {
         setAccuracy(pos.coords.accuracy);
         setTimestamp(pos.timestamp);
         setError(null);
-        setGeoStatus(manualOverride ? "custom" : "success");
+        setGeoStatus("success");
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
           setError("Location permission denied.");
-          setGeoStatus(manualOverride ? "custom" : "denied");
+          setGeoStatus("denied");
         } else {
           setError("Unable to determine location.");
-          setGeoStatus(manualOverride ? "custom" : "error");
+          setGeoStatus("error");
         }
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12_000 },
     );
 
     return () => navigator.geolocation.clearWatch(id);
-  }, [manualOverride]);
+  }, []);
 
-  // Active coordinates: manual override > live GPS coords > default center (Tondiarpet)
-  const effective: Coords = manualOverride ?? coords ?? DEFAULT_CENTER;
+  // Single authoritative coordinate value (live GPS coords > default center)
+  const effective: Coords = coords ?? DEFAULT_CENTER;
 
   // Trigger real-time reverse geocoding on live GPS coordinate updates
   useEffect(() => {
@@ -340,49 +312,41 @@ export function useGeolocation() {
 
   // Human-readable dynamic titles and sublabels matching requirements
   let locationTitle = "Detecting your location...";
-  let locationSublabel = manualOverride
-    ? "Location calibrated manually"
-    : "Location tracked live via GPS";
+  let locationSublabel = "Location tracked live via GPS";
 
-  if (!manualOverride && geoStatus === "denied") {
+  if (geoStatus === "denied") {
     locationTitle = "Location permission required";
     locationSublabel = "Enable GPS in browser settings";
-  } else if (!manualOverride && geoStatus === "error") {
+  } else if (geoStatus === "error") {
     locationTitle = "Unable to determine location";
     locationSublabel = "GPS satellite signal lost";
-  } else if (!manualOverride && geoStatus === "locating" && !coords) {
+  } else if (geoStatus === "locating" && !coords) {
     locationTitle = "Detecting your location...";
     locationSublabel = "Searching for GPS satellite signal...";
   } else if (geocodedAddress?.formattedAddress) {
     locationTitle = geocodedAddress.formattedAddress;
-    locationSublabel = manualOverride
-      ? "Location calibrated manually"
-      : "Location tracked live via GPS";
-  } else if (effective) {
-    locationTitle = `${effective.lat.toFixed(4)}° N, ${effective.lng.toFixed(4)}° E`;
-    locationSublabel = manualOverride
-      ? "Location calibrated manually"
-      : "Location tracked live via GPS";
+    locationSublabel = "Location tracked live via GPS";
+  } else if (coords) {
+    locationTitle = `${coords.lat.toFixed(4)}° N, ${coords.lng.toFixed(4)}° E`;
+    locationSublabel = "Location tracked live via GPS";
   }
 
-  const cityArea = geocodedAddress?.cityArea || (effective ? "Tondiarpet" : "Detecting...");
+  const cityArea = geocodedAddress?.cityArea || (coords ? "Tondiarpet" : "Tondiarpet");
   const stateCountry = geocodedAddress?.stateCountry || "Chennai 600081, Tamil Nadu";
 
   return {
     coords,
-    accuracy: manualOverride ? 5 : accuracy,
+    accuracy,
     timestamp,
     error,
-    geoStatus: manualOverride ? "custom" : geoStatus,
-    isLocating: !manualOverride && geoStatus === "locating" && !coords,
+    geoStatus,
+    isLocating: geoStatus === "locating" && !coords,
     effective,
-    isManual: Boolean(manualOverride),
     locationTitle,
     locationSublabel,
     cityArea,
     stateCountry,
     requestLocation,
-    setCustomLocation,
   };
 }
 

@@ -2,13 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 
 export type Coords = { lat: number; lng: number };
 
-export const DEFAULT_CENTER: Coords = { lat: 13.1258, lng: 80.2895 };
-
-export const DEFAULT_GEOCODED: ReverseGeocodeResult = {
-  formattedAddress: "Murugesan Street, Tondiarpet Market, Chennai - 600081",
-  cityArea: "Tondiarpet Market, Murugesan St",
-  stateCountry: "Chennai 600081, Tamil Nadu",
-};
+export const DEFAULT_CENTER: Coords = { lat: 13.0827, lng: 80.2707 };
 
 export type GeoStatus = "locating" | "success" | "denied" | "error";
 
@@ -31,10 +25,6 @@ function cleanAreaName(str: string): string {
 
 /** Fetches human-readable address from live GPS coordinates via reverse geocoding */
 export async function fetchReverseGeocode(lat: number, lng: number): Promise<ReverseGeocodeResult> {
-  // Precision check for Tondiarpet Market / Murugesan Street
-  if (Math.abs(lat - 13.1258) < 0.008 && Math.abs(lng - 80.2895) < 0.008) {
-    return DEFAULT_GEOCODED;
-  }
   // 1. Primary: High-speed Photon OpenStreetMap Reverse Geocoding
   try {
     const photonUrl = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`;
@@ -191,19 +181,17 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
 }
 
 export function useGeolocation() {
-  const [coords, setCoords] = useState<Coords | null>(DEFAULT_CENTER);
-  const [accuracy, setAccuracy] = useState<number | null>(12);
-  const [timestamp, setTimestamp] = useState<number | null>(() => Date.now());
+  const [coords, setCoords] = useState<Coords | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [timestamp, setTimestamp] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [geoStatus, setGeoStatus] = useState<GeoStatus>("success");
+  const [geoStatus, setGeoStatus] = useState<GeoStatus>("locating");
 
   // Dynamic reverse-geocoded address states
-  const [geocodedAddress, setGeocodedAddress] = useState<ReverseGeocodeResult | null>(
-    DEFAULT_GEOCODED,
-  );
-  const lastGeocodedCoordsRef = useRef<Coords | null>(DEFAULT_CENTER);
+  const [geocodedAddress, setGeocodedAddress] = useState<ReverseGeocodeResult | null>(null);
+  const lastGeocodedCoordsRef = useRef<Coords | null>(null);
   const isGeocodingRef = useRef(false);
-  const coordsRef = useRef<Coords | null>(DEFAULT_CENTER);
+  const coordsRef = useRef<Coords | null>(null);
 
   // Manual request / refresh trigger for live GPS
   const requestLocation = useCallback(() => {

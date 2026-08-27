@@ -870,7 +870,7 @@ function TouristHome() {
 
             <div className="flex items-center justify-between text-[10px] text-[#77716D] pt-0.5">
               <span className="truncate max-w-[110px] sm:max-w-none">
-                {crowdMatchedLocation ? crowdMatchedLocation.name : "Chennai Area"}
+                {crowdMatchedLocation ? `Sensor: ${crowdMatchedLocation.name}` : "Chennai Sensor"}
               </span>
 
               {crowdConnectionState === "OFFLINE" ? (

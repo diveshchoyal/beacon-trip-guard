@@ -50,6 +50,16 @@ export const CROWDX_MONITORED_LOCATIONS: CrowdXLocation[] = [
     capacity: 5000,
     cameraId: "cam_royapuram_01",
   },
+  {
+    id: "loc_madhavaram",
+    name: "Madhavaram Transit & Market Hub",
+    type: "transit",
+    address: "Madhavaram High Road, Chennai",
+    lat: 13.148,
+    lng: 80.231,
+    capacity: 7000,
+    cameraId: "cam_madhavaram_01",
+  },
 
   // Central & Coastal Chennai
   {

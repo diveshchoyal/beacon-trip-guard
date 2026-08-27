@@ -33,21 +33,10 @@ export function useCrowdX({ userLat, userLng, hasLocationPermission = true }: Us
 
   const { apiUrl, wsUrl } = useMemo(() => getCrowdXConfig(), []);
 
-  // Determine nearest monitored location matching user live GPS coordinates
+  // Determine nearest monitored CrowdX location relative to user's device GPS
   const nearestMatch = useMemo(() => {
     if (!userLat || !userLng) return null;
-    return {
-      location: {
-        id: "loc_live",
-        name: "Tondiarpet Market",
-        type: "market" as const,
-        address: "Murugesan Street, Tondiarpet Market, Chennai",
-        lat: userLat,
-        lng: userLng,
-        capacity: 5000,
-      },
-      distanceKm: 0.1,
-    };
+    return findNearestCrowdXLocation(userLat, userLng, CROWDX_MONITORED_LOCATIONS);
   }, [userLat, userLng]);
 
   // Fetch available camera inventory from CrowdX backend (if live)

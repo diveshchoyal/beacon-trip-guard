@@ -803,9 +803,10 @@ export function useNearbyPolice(lat?: number | null, lng?: number | null) {
     distanceMeters: number;
     distanceFormatted: string;
   } | null>(() => {
-    const targetLat = typeof lat === "number" ? lat : 13.1258;
-    const targetLng = typeof lng === "number" ? lng : 80.2895;
-    return findNearestPoliceStation(targetLat, targetLng);
+    if (typeof lat === "number" && typeof lng === "number") {
+      return findNearestPoliceStation(lat, lng);
+    }
+    return null;
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

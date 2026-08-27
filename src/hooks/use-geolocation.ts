@@ -24,7 +24,88 @@ function cleanAreaName(str: string): string {
 
 /** Fetches human-readable address from live GPS coordinates via reverse geocoding */
 export async function fetchReverseGeocode(lat: number, lng: number): Promise<ReverseGeocodeResult> {
-  // 1. Try OpenStreetMap Nominatim with zoom 18 for street-level precision
+  // 1. Primary: High-speed Photon OpenStreetMap Reverse Geocoding
+  try {
+    const photonUrl = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`;
+    const res = await fetch(photonUrl, { signal: AbortSignal.timeout(3500) });
+    if (res.ok) {
+      const data = await res.json();
+      const props = data?.features?.[0]?.properties;
+      if (props) {
+        const road = props.name || props.street || "";
+        const district = props.district ? cleanAreaName(props.district) : "";
+        const locality = props.locality ? cleanAreaName(props.locality) : "";
+        const city = props.city ? cleanAreaName(props.city) : "Chennai";
+        const postcode = props.postcode || "";
+        const state = props.state || "Tamil Nadu";
+        const country = props.country || "India";
+
+        const neighborhood = district || locality || "";
+        const cityArea = neighborhood || city;
+
+        let formattedAddress = "";
+        if (road && neighborhood) {
+          formattedAddress = `${road}, ${neighborhood}${postcode ? ` - ${postcode}` : ""}`;
+        } else if (neighborhood && city) {
+          formattedAddress = `${neighborhood}, ${city}${postcode ? ` ${postcode}` : ""}`;
+        } else if (road && city) {
+          formattedAddress = `${road}, ${city}${postcode ? ` ${postcode}` : ""}`;
+        } else {
+          formattedAddress = `${neighborhood || city}, ${state}${postcode ? ` ${postcode}` : ""}`;
+        }
+
+        const stateCountry = postcode ? `${city} ${postcode}, ${state}` : `${city}, ${state}`;
+
+        return { formattedAddress, cityArea, stateCountry };
+      }
+    }
+  } catch {
+    // Fallback to secondary geocoder
+  }
+
+  // 2. Secondary fallback: BigDataCloud Reverse Geocoding with deep administrative hierarchy
+  try {
+    const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
+    const res = await fetch(bdcUrl, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const data = await res.json();
+      const city = data?.city ? cleanAreaName(data.city) : "Chennai";
+      const state = data?.principalSubdivision || "Tamil Nadu";
+      const country = data?.countryName || "India";
+      const postcode = data?.postcode || "";
+
+      // Extract specific neighborhood/suburb from administrative list (order 10-14)
+      let neighborhood = "";
+      const adminList = data?.localityInfo?.administrative;
+      if (Array.isArray(adminList) && adminList.length > 0) {
+        for (let i = adminList.length - 1; i >= 0; i--) {
+          const item = adminList[i];
+          if (
+            item?.name &&
+            item.name.toLowerCase() !== "india" &&
+            item.name.toLowerCase() !== "tamil nadu" &&
+            item.name.toLowerCase() !== "chennai" &&
+            item.name.toLowerCase() !== "chennai district"
+          ) {
+            neighborhood = cleanAreaName(item.name);
+            break;
+          }
+        }
+      }
+
+      const cityArea = neighborhood || (data?.locality ? cleanAreaName(data.locality) : city);
+      const stateCountry = postcode ? `${city} ${postcode}, ${state}` : `${city}, ${state}`;
+      const formattedAddress = neighborhood
+        ? `${neighborhood}, ${city}${postcode ? ` ${postcode}` : ""}`
+        : `${cityArea}, ${stateCountry}`;
+
+      return { formattedAddress, cityArea, stateCountry };
+    }
+  } catch {
+    // Fallback to OpenStreetMap Nominatim
+  }
+
+  // 3. Tertiary fallback: OpenStreetMap Nominatim
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`;
     const res = await fetch(url, {
@@ -47,60 +128,22 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
         addr.city || addr.town || addr.municipality || addr.county || addr.state_district;
       const state = addr.state || "Tamil Nadu";
       const country = addr.country || "India";
+      const postcode = addr.postcode || "";
 
       const suburb = suburbRaw ? cleanAreaName(suburbRaw) : "";
-      const city = cityRaw ? cleanAreaName(cityRaw) : "";
+      const city = cityRaw ? cleanAreaName(cityRaw) : "Chennai";
 
       let formattedAddress = "";
       if (road && suburb) {
-        formattedAddress = `${road}, ${suburb}`;
-      } else if (road && city) {
-        formattedAddress = `${road}, ${city}`;
+        formattedAddress = `${road}, ${suburb}${postcode ? ` - ${postcode}` : ""}`;
       } else if (suburb && city) {
-        formattedAddress = `${suburb}, ${city}`;
-      } else if (road) {
-        formattedAddress = road;
-      } else if (suburb) {
-        formattedAddress = suburb;
-      } else if (city) {
-        formattedAddress = city;
+        formattedAddress = `${suburb}, ${city}${postcode ? ` ${postcode}` : ""}`;
       } else {
-        formattedAddress = data?.name || `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
+        formattedAddress = `${suburb || city}, ${state}`;
       }
 
       const cityArea = suburb || city || "Chennai";
-      const stateCountry = city ? `${city}, ${state}` : `${state}, ${country}`;
-
-      return { formattedAddress, cityArea, stateCountry };
-    }
-  } catch {
-    // Fallback to secondary geocoder
-  }
-
-  // 2. Secondary fallback to BigDataCloud reverse geocode client API
-  try {
-    const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
-    const res = await fetch(bdcUrl, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const data = await res.json();
-      const locality = data?.locality ? cleanAreaName(data.locality) : "";
-      const city = data?.city ? cleanAreaName(data.city) : "";
-      const state = data?.principalSubdivision || "Tamil Nadu";
-      const country = data?.countryName || "India";
-
-      let formattedAddress = "";
-      if (locality && city && locality.toLowerCase() !== city.toLowerCase()) {
-        formattedAddress = `${locality}, ${city}`;
-      } else if (locality) {
-        formattedAddress = locality;
-      } else if (city) {
-        formattedAddress = `${city}, ${state}`;
-      } else {
-        formattedAddress = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
-      }
-
-      const cityArea = locality || city || "Chennai";
-      const stateCountry = city ? `${city}, ${state}` : `${state}, ${country}`;
+      const stateCountry = postcode ? `${city} ${postcode}, ${state}` : `${city}, ${state}`;
 
       return { formattedAddress, cityArea, stateCountry };
     }
@@ -141,10 +184,6 @@ export function useGeolocation() {
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        // Accuracy filter: ignore wild cell tower jumps (> 4000m) if previous accurate fix exists
-        if (coordsRef.current && pos.coords.accuracy > 4000) {
-          return;
-        }
         const newCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         coordsRef.current = newCoords;
         setCoords(newCoords);
@@ -162,7 +201,7 @@ export function useGeolocation() {
           setGeoStatus("error");
         }
       },
-      { enableHighAccuracy: true, timeout: 10_000 },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
     );
   }, []);
 
@@ -178,11 +217,6 @@ export function useGeolocation() {
 
     const id = navigator.geolocation.watchPosition(
       (pos) => {
-        // Accuracy validation: filter out noisy jumps if previous accurate reading exists
-        if (coordsRef.current && pos.coords.accuracy > 4000) {
-          return;
-        }
-
         const newCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         coordsRef.current = newCoords;
         setCoords(newCoords);
@@ -200,7 +234,7 @@ export function useGeolocation() {
           setGeoStatus("error");
         }
       },
-      { enableHighAccuracy: true, maximumAge: 15_000, timeout: 12_000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12_000 },
     );
 
     return () => navigator.geolocation.clearWatch(id);

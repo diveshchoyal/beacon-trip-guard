@@ -750,21 +750,32 @@ function TouristHome() {
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D]">
                   YOUR LOCATION
                 </span>
-                {geoStatus === "success" ? (
-                  <span className="flex items-center gap-1 text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
-                    <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
-                    LIVE
-                  </span>
-                ) : geoStatus === "locating" ? (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-[#F2A93B] uppercase tracking-wider">
-                    <span className="h-2 w-2 rounded-full bg-[#F2A93B] animate-pulse" />
-                    DETECTING
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold text-[#77716D] uppercase tracking-wider">
-                    OFFLINE
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={requestLocation}
+                    className="flex items-center gap-1 text-[10px] font-bold text-[#FF6F61] hover:underline cursor-pointer"
+                    title="Refresh live GPS coordinates"
+                  >
+                    <RefreshCw className="h-2.5 w-2.5" />
+                    <span>Refresh</span>
+                  </button>
+                  {geoStatus === "success" ? (
+                    <span className="flex items-center gap-1 text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
+                      <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
+                      LIVE
+                    </span>
+                  ) : geoStatus === "locating" ? (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#F2A93B] uppercase tracking-wider">
+                      <span className="h-2 w-2 rounded-full bg-[#F2A93B] animate-pulse" />
+                      DETECTING
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-[#77716D] uppercase tracking-wider">
+                      OFFLINE
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Geographic Details */}
@@ -778,31 +789,38 @@ function TouristHome() {
               </div>
 
               {/* Live Coordinates */}
-              <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[#FFF8F3] p-2.5 border border-[#F6B28F]/20 text-[11px]">
-                <div>
-                  <span className="text-[9px] font-black uppercase text-[#77716D] block">
-                    Latitude
-                  </span>
-                  <span className="font-mono font-bold text-[#1E1E1E]">
-                    {coords
-                      ? `${coords.lat.toFixed(4)}° N`
-                      : effective.lat
-                        ? `${effective.lat.toFixed(4)}° N`
-                        : "—"}
-                  </span>
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[#FFF8F3] p-2.5 border border-[#F6B28F]/20 text-[11px]">
+                  <div>
+                    <span className="text-[9px] font-black uppercase text-[#77716D] block">
+                      Latitude
+                    </span>
+                    <span className="font-mono font-bold text-[#1E1E1E]">
+                      {coords
+                        ? `${coords.lat.toFixed(4)}° N`
+                        : effective.lat
+                          ? `${effective.lat.toFixed(4)}° N`
+                          : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-black uppercase text-[#77716D] block">
+                      Longitude
+                    </span>
+                    <span className="font-mono font-bold text-[#1E1E1E]">
+                      {coords
+                        ? `${coords.lng.toFixed(4)}° E`
+                        : effective.lng
+                          ? `${effective.lng.toFixed(4)}° E`
+                          : "—"}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[9px] font-black uppercase text-[#77716D] block">
-                    Longitude
-                  </span>
-                  <span className="font-mono font-bold text-[#1E1E1E]">
-                    {coords
-                      ? `${coords.lng.toFixed(4)}° E`
-                      : effective.lng
-                        ? `${effective.lng.toFixed(4)}° E`
-                        : "—"}
-                  </span>
-                </div>
+                {accuracy !== null && (
+                  <p className="text-[10px] text-right font-medium text-[#77716D] pr-1">
+                    GPS Accuracy: ±{Math.round(accuracy)}m
+                  </p>
+                )}
               </div>
 
               {/* View on Map CTA Button */}

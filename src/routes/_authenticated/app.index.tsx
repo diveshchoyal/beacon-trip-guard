@@ -855,7 +855,7 @@ function TouristHome() {
                 </span>
               ) : crowdConnectionState === "OFFLINE" ? (
                 <span className="flex items-center gap-1 text-[9px] font-bold text-[#77716D] uppercase tracking-wider">
-                  ○ OFFLINE
+                  ○ SENSOR OFFLINE
                 </span>
               ) : crowdConnectionState === "CONNECTING" ? (
                 <span className="flex items-center gap-1 text-[9px] font-bold text-[#F2A93B] uppercase tracking-wider">
@@ -883,7 +883,7 @@ function TouristHome() {
             ) : crowdConnectionState === "DENIED" ? (
               <span className="text-sm font-bold text-[#77716D]">Location Required</span>
             ) : crowdConnectionState === "OFFLINE" ? (
-              <span className="text-sm font-bold text-[#77716D]">Offline</span>
+              <span className="text-sm font-bold text-[#77716D]">Live Sensor Offline</span>
             ) : (
               <span className="text-sm font-bold text-[#77716D]">Connecting...</span>
             )}
@@ -897,7 +897,7 @@ function TouristHome() {
                 : crowdConnectionState === "DENIED"
                   ? "Enable location to see nearby crowd"
                   : crowdConnectionState === "OFFLINE"
-                    ? "Crowd monitoring unavailable"
+                    ? "Live crowd sensing unavailable"
                     : "Connecting to YOLO stream..."}
             </p>
 
@@ -912,7 +912,7 @@ function TouristHome() {
                   className="font-bold text-[#FF6F61] hover:underline cursor-pointer flex items-center gap-0.5"
                   title="Retry live stream connection"
                 >
-                  <span>Retry</span>
+                  <span>↺ Retry</span>
                 </button>
               ) : (
                 <span className="shrink-0 font-medium">{crowdFreshnessText}</span>

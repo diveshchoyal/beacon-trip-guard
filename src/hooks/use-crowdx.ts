@@ -149,7 +149,7 @@ export function useCrowdX({ userLat, userLng, hasLocationPermission = true }: Us
         const ws = new WebSocket(endpoint);
         wsRef.current = ws;
 
-        // 5-second connection timeout
+        // 3.5-second strict connection timeout
         connectionTimeoutRef.current = window.setTimeout(() => {
           if (!isSubscribed) return;
           if (ws.readyState !== WebSocket.OPEN) {
@@ -160,7 +160,7 @@ export function useCrowdX({ userLat, userLng, hasLocationPermission = true }: Us
             }
             handleFailure();
           }
-        }, 5000);
+        }, 3500);
 
         ws.onopen = () => {
           if (!isSubscribed) return;
@@ -213,30 +213,17 @@ export function useCrowdX({ userLat, userLng, hasLocationPermission = true }: Us
         connectionTimeoutRef.current = null;
       }
 
-      // Try next endpoint candidate if available
-      if (currentEndpointIndex < candidateEndpoints.length - 1) {
+      // Try next endpoint candidate once if available
+      if (currentEndpointIndex < Math.min(1, candidateEndpoints.length - 1)) {
         currentEndpointIndex += 1;
         attemptConnection(currentEndpointIndex);
         return;
       }
 
-      // All candidate endpoints failed -> Transition to OFFLINE
+      // Transition immediately to OFFLINE graceful fallback state
       setConnectionState("OFFLINE");
-      setStatusMessage("Crowd monitoring unavailable");
-
-      // Exponential backoff reconnect: attempt up to 3 times (5s, 10s, 20s), then stay OFFLINE
-      if (retryCountRef.current < 3) {
-        const delay = Math.min(30000, 5000 * Math.pow(2, retryCountRef.current));
-        retryCountRef.current += 1;
-
-        reconnectTimeoutRef.current = window.setTimeout(() => {
-          if (isSubscribed) {
-            currentEndpointIndex = 0;
-            setConnectionState("CONNECTING");
-            attemptConnection(0);
-          }
-        }, delay);
-      }
+      setStatusMessage("Live crowd sensing unavailable");
+      setFreshnessText("Sensor offline");
     }
 
     // Start initial connection attempt

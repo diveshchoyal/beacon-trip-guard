@@ -72,6 +72,7 @@ function TouristHome() {
   const {
     effective,
     coords,
+    accuracy,
     error: geoError,
     geoStatus,
     locationTitle,
@@ -817,7 +818,7 @@ function TouristHome() {
                     </span>
                   </div>
                 </div>
-                {accuracy !== null && (
+                {typeof accuracy === "number" && (
                   <p className="text-[10px] text-right font-medium text-[#77716D] pr-1">
                     GPS Accuracy: ±{Math.round(accuracy)}m
                   </p>

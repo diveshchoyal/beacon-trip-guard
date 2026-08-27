@@ -3,16 +3,22 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  Camera,
   CheckCircle2,
+  Eye,
+  FileCheck,
   FileText,
   Fingerprint,
   Globe,
   IdCard,
+  Image as ImageIcon,
   LogOut,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   Trash2,
+  Upload,
   UploadCloud,
   User,
   X,
@@ -29,6 +35,8 @@ import {
   loadDocumentWallet,
   saveDocumentWallet,
   parseDocumentInfo,
+  getDemoDocumentWallet,
+  clearDocumentWallet,
 } from "@/lib/documents.types";
 
 export const Route = createFileRoute("/_authenticated/app/profile")({
@@ -49,6 +57,21 @@ function ProfilePage() {
     null,
   );
 
+  // Photo upload & preview state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Signed URLs cache for cards
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  // Full-size image modal state
+  const [viewingPhoto, setViewingPhoto] = useState<{
+    url: string;
+    title: string;
+    docNumber: string;
+  } | null>(null);
+
   // Document Form State inside Modal
   const [docForm, setDocForm] = useState({
     docNumber: "",
@@ -68,9 +91,43 @@ function ProfilePage() {
     setFullName(profile?.full_name ?? "");
     setPhone(profile?.phone ?? "");
     if (user?.id) {
-      setWallet(loadDocumentWallet(user.id));
+      const loaded = loadDocumentWallet(user.id);
+      setWallet(loaded);
+      void resolveSignedUrls(loaded);
     }
   }, [profile, user]);
+
+  // Resolves Supabase Storage signed URLs for all saved wallet documents
+  const resolveSignedUrls = async (w: DocumentWallet) => {
+    const urls: Record<string, string> = {};
+
+    const resolvePath = async (key: string, pathOrUrl?: string) => {
+      if (!pathOrUrl) return;
+      // If already data URL or full HTTP link
+      if (pathOrUrl.startsWith("data:") || pathOrUrl.startsWith("http")) {
+        urls[key] = pathOrUrl;
+        return;
+      }
+      try {
+        const { data, error } = await supabase.storage
+          .from("wallet-documents")
+          .createSignedUrl(pathOrUrl, 3600);
+        if (!error && data?.signedUrl) {
+          urls[key] = data.signedUrl;
+        } else {
+          urls[key] = pathOrUrl;
+        }
+      } catch {
+        urls[key] = pathOrUrl;
+      }
+    };
+
+    if (w.passport?.photoUrl) await resolvePath("passport", w.passport.photoUrl);
+    if (w.visa?.fileUrl) await resolvePath("visa", w.visa.fileUrl);
+    if (w.citizenId?.fileUrl) await resolvePath("citizenId", w.citizenId.fileUrl);
+
+    setSignedUrls(urls);
+  };
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,8 +148,12 @@ function ProfilePage() {
 
   const openDocModal = (type: "passport" | "visa" | "citizenId") => {
     setEditingDocType(type);
+    setSelectedFile(null);
+
+    let existingPhoto: string | null = null;
     if (type === "passport") {
       const p = wallet.passport;
+      existingPhoto = signedUrls.passport || p?.photoUrl || null;
       setDocForm({
         docNumber: p?.docNumber || "",
         fullName: p?.fullName || fullName || "",
@@ -107,6 +168,7 @@ function ProfilePage() {
       });
     } else if (type === "visa") {
       const v = wallet.visa;
+      existingPhoto = signedUrls.visa || v?.fileUrl || null;
       setDocForm({
         docNumber: v?.visaNumber || "",
         fullName: fullName || "",
@@ -121,6 +183,7 @@ function ProfilePage() {
       });
     } else if (type === "citizenId") {
       const c = wallet.citizenId;
+      existingPhoto = signedUrls.citizenId || c?.fileUrl || null;
       setDocForm({
         docNumber: c?.idNumber || "",
         fullName: fullName || "",
@@ -134,14 +197,38 @@ function ProfilePage() {
         state: c?.state || "",
       });
     }
+
+    setPhotoPreview(existingPhoto);
     setDocModalOpen(true);
+  };
+
+  // Handle local file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size must be under 10MB");
+      return;
+    }
+
+    setSelectedFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPhotoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSimulateExtract = () => {
     if (!editingDocType) return;
     setIsExtracting(true);
     setTimeout(() => {
-      const parsed = parseDocumentInfo(editingDocType, "scanned_doc.pdf", fullName);
+      const parsed = parseDocumentInfo(
+        editingDocType,
+        selectedFile?.name || "scanned_doc.pdf",
+        fullName,
+      );
       if (editingDocType === "passport") {
         setDocForm((prev) => ({
           ...prev,
@@ -174,13 +261,45 @@ function ProfilePage() {
     }, 600);
   };
 
-  const handleSaveDocument = (e: React.FormEvent) => {
+  const handleSaveDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !editingDocType) return;
 
     if (!docForm.docNumber.trim()) {
       toast.error("Please enter a document reference number.");
       return;
+    }
+
+    setUploadingPhoto(true);
+    let finalPhotoPath: string | undefined = undefined;
+
+    // Upload to Supabase Storage if a new file was chosen
+    if (selectedFile) {
+      try {
+        const fileExt = selectedFile.name.split(".").pop() || "png";
+        const filePath = `${user.id}/${editingDocType}_${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("wallet-documents")
+          .upload(filePath, selectedFile, {
+            upsert: true,
+            contentType: selectedFile.type,
+          });
+
+        if (!uploadError) {
+          finalPhotoPath = filePath;
+        } else {
+          // If storage bucket is not configured or fails, store local preview data URL
+          finalPhotoPath = photoPreview || undefined;
+        }
+      } catch {
+        finalPhotoPath = photoPreview || undefined;
+      }
+    } else {
+      // Preserve existing photo if not changed
+      if (editingDocType === "passport") finalPhotoPath = wallet.passport?.photoUrl;
+      else if (editingDocType === "visa") finalPhotoPath = wallet.visa?.fileUrl;
+      else if (editingDocType === "citizenId") finalPhotoPath = wallet.citizenId?.fileUrl;
     }
 
     const newWallet: DocumentWallet = { ...wallet };
@@ -194,6 +313,7 @@ function ProfilePage() {
         nationality: docForm.nationality.trim(),
         gender: docForm.gender.trim(),
         expiry: docForm.expiry,
+        photoUrl: finalPhotoPath,
         savedAt: now,
         verified: true,
       };
@@ -204,6 +324,7 @@ function ProfilePage() {
         destination: docForm.destination.trim(),
         validFrom: docForm.validFrom,
         expiry: docForm.expiry,
+        fileUrl: finalPhotoPath,
         savedAt: now,
       };
     } else if (editingDocType === "citizenId") {
@@ -211,13 +332,17 @@ function ProfilePage() {
         idNumber: docForm.docNumber.trim(),
         state: docForm.state.trim(),
         expiry: docForm.expiry,
+        fileUrl: finalPhotoPath,
         savedAt: now,
       };
     }
 
     setWallet(newWallet);
     saveDocumentWallet(user.id, newWallet);
+    await resolveSignedUrls(newWallet);
+    setUploadingPhoto(false);
     setDocModalOpen(false);
+
     toast.success(
       `${editingDocType === "passport" ? "Passport" : editingDocType === "visa" ? "Visa" : "Citizen ID"} saved to My Documents`,
     );
@@ -229,6 +354,7 @@ function ProfilePage() {
     delete newWallet[type];
     setWallet(newWallet);
     saveDocumentWallet(user.id, newWallet);
+    void resolveSignedUrls(newWallet);
     toast.info("Document removed from wallet");
   };
 
@@ -237,6 +363,7 @@ function ProfilePage() {
     const demo = getDemoDocumentWallet();
     setWallet(demo);
     saveDocumentWallet(user.id, demo);
+    void resolveSignedUrls(demo);
     toast.success("Loaded realistic Demo Documents (Passport, Visa, Citizen ID)!");
   };
 
@@ -244,6 +371,7 @@ function ProfilePage() {
     if (!user) return;
     clearDocumentWallet(user.id);
     setWallet({});
+    setSignedUrls({});
     toast.info("Cleared all saved documents from wallet");
   };
 
@@ -283,7 +411,7 @@ function ProfilePage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. MY DOCUMENTS SECTION (DOCUMENT WALLET) */}
+      {/* 2. MY DOCUMENTS SECTION (DOCUMENT WALLET WITH PHOTO THUMBNAILS) */}
       {/* ========================================================================= */}
       <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-6 shadow-sm text-left space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-black/5 pb-3">
@@ -321,19 +449,23 @@ function ProfilePage() {
           </div>
         </div>
 
-        {/* Compact Document Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+        {/* Document Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+          {/* ========================================================================= */}
           {/* Card 1: Passport */}
-          <div className="rounded-2xl border border-[#F6B28F]/25 bg-[#FFF8F3] p-4 text-left space-y-3 flex flex-col justify-between">
-            <div className="space-y-1">
+          {/* ========================================================================= */}
+          <div className="rounded-2xl border border-[#F6B28F]/30 bg-[#FFF8F3] p-4 text-left space-y-3 flex flex-col justify-between shadow-xs">
+            <div className="space-y-2.5">
+              {/* Header Status */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-[#1E1E1E] flex items-center gap-1.5">
-                  <Globe className="h-3.5 w-3.5 text-[#FF6F61]" />
+                  <Globe className="h-4 w-4 text-[#FF6F61]" />
                   Passport
                 </span>
                 {wallet.passport ? (
-                  <span className="text-[10px] font-black text-[#39B86B] bg-[#39B86B]/15 px-2 py-0.5 rounded-full">
-                    ✓ Saved
+                  <span className="text-[10px] font-black text-[#39B86B] bg-[#39B86B]/15 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>Added ✓</span>
                   </span>
                 ) : (
                   <span className="text-[10px] font-bold text-[#77716D] bg-black/5 px-2 py-0.5 rounded-full">
@@ -341,25 +473,87 @@ function ProfilePage() {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-[#77716D]">
-                {wallet.passport
-                  ? `${wallet.passport.docNumber} · ${wallet.passport.nationality}`
-                  : "Government ID / Passport"}
-              </p>
+
+              {/* Photo Thumbnail + Details */}
+              {wallet.passport ? (
+                <div className="flex items-start gap-3">
+                  {signedUrls.passport ? (
+                    <div
+                      onClick={() =>
+                        setViewingPhoto({
+                          url: signedUrls.passport,
+                          title: "Passport Photo",
+                          docNumber: wallet.passport?.docNumber || "",
+                        })
+                      }
+                      className="relative h-16 w-16 rounded-xl overflow-hidden border border-[#F6B28F]/40 bg-white shadow-xs cursor-pointer group shrink-0"
+                    >
+                      <img
+                        src={signedUrls.passport}
+                        alt="Passport Preview"
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                        <Eye className="h-4 w-4 drop-shadow-md" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white border border-[#F6B28F]/30 text-[#FF6F61] shrink-0">
+                      <Globe className="h-6 w-6" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1 space-y-0.5 text-xs">
+                    <p className="font-black text-[#1E1E1E] font-mono truncate">
+                      {wallet.passport.docNumber}
+                    </p>
+                    <p className="text-[11px] text-[#77716D] truncate">
+                      {wallet.passport.fullName}
+                    </p>
+                    <p className="text-[10px] text-[#77716D]">
+                      {wallet.passport.nationality} · Exp: {wallet.passport.expiry || "N/A"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-2 text-xs text-[#77716D]">
+                  No passport saved. Add your passport details and photo to enable auto-fill.
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 pt-2 border-t border-black/5">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1.5 pt-2 border-t border-black/5">
+              {wallet.passport && signedUrls.passport && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewingPhoto({
+                      url: signedUrls.passport,
+                      title: "Passport Photo",
+                      docNumber: wallet.passport?.docNumber || "",
+                    })
+                  }
+                  className="flex items-center justify-center gap-1 rounded-xl bg-white border border-[#F6B28F]/30 px-2.5 py-1.5 text-[11px] font-bold text-[#1E1E1E] hover:bg-[#FFF8F3] transition-colors cursor-pointer"
+                  title="View full-size photo"
+                >
+                  <Eye className="h-3 w-3 text-[#FF6F61]" />
+                  <span>View</span>
+                </button>
+              )}
+
               <button
                 onClick={() => openDocModal("passport")}
-                className="flex-1 rounded-xl bg-white border border-[#F6B28F]/30 py-1.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FF6F61] hover:text-white transition-colors cursor-pointer"
+                className="flex-1 rounded-xl bg-white border border-[#F6B28F]/30 py-1.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FF6F61] hover:text-white transition-colors cursor-pointer text-center"
               >
-                {wallet.passport ? "Edit Passport" : "+ Add Passport"}
+                {wallet.passport ? "Edit / Replace" : "+ Add Passport"}
               </button>
+
               {wallet.passport && (
                 <button
                   onClick={() => handleDeleteDocument("passport")}
-                  className="p-1.5 text-[#77716D] hover:text-[#E94B5F] transition-colors"
-                  title="Remove document"
+                  className="rounded-xl bg-black/5 p-1.5 text-[#77716D] hover:bg-[#E94B5F]/15 hover:text-[#E94B5F] transition-colors cursor-pointer"
+                  title="Remove passport"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -367,17 +561,21 @@ function ProfilePage() {
             </div>
           </div>
 
-          {/* Card 2: Visa */}
-          <div className="rounded-2xl border border-[#F6B28F]/25 bg-[#FFF8F3] p-4 text-left space-y-3 flex flex-col justify-between">
-            <div className="space-y-1">
+          {/* ========================================================================= */}
+          {/* Card 2: Travel Visa */}
+          {/* ========================================================================= */}
+          <div className="rounded-2xl border border-[#F6B28F]/30 bg-[#FFF8F3] p-4 text-left space-y-3 flex flex-col justify-between shadow-xs">
+            <div className="space-y-2.5">
+              {/* Header Status */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-[#1E1E1E] flex items-center gap-1.5">
-                  <IdCard className="h-3.5 w-3.5 text-blue-500" />
+                  <FileCheck className="h-4 w-4 text-[#FF6F61]" />
                   Travel Visa
                 </span>
                 {wallet.visa ? (
-                  <span className="text-[10px] font-black text-[#39B86B] bg-[#39B86B]/15 px-2 py-0.5 rounded-full">
-                    ✓ Saved
+                  <span className="text-[10px] font-black text-[#39B86B] bg-[#39B86B]/15 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>Added ✓</span>
                   </span>
                 ) : (
                   <span className="text-[10px] font-bold text-[#77716D] bg-black/5 px-2 py-0.5 rounded-full">
@@ -385,25 +583,86 @@ function ProfilePage() {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-[#77716D]">
-                {wallet.visa
-                  ? `${wallet.visa.visaStatus} · Exp ${wallet.visa.expiry}`
-                  : "e-Visa or Tourist Permit"}
-              </p>
+
+              {/* Photo Thumbnail + Details */}
+              {wallet.visa ? (
+                <div className="flex items-start gap-3">
+                  {signedUrls.visa ? (
+                    <div
+                      onClick={() =>
+                        setViewingPhoto({
+                          url: signedUrls.visa,
+                          title: "Travel Visa Photo",
+                          docNumber: wallet.visa?.visaNumber || "",
+                        })
+                      }
+                      className="relative h-16 w-16 rounded-xl overflow-hidden border border-[#F6B28F]/40 bg-white shadow-xs cursor-pointer group shrink-0"
+                    >
+                      <img
+                        src={signedUrls.visa}
+                        alt="Visa Preview"
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                        <Eye className="h-4 w-4 drop-shadow-md" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white border border-[#F6B28F]/30 text-[#FF6F61] shrink-0">
+                      <FileCheck className="h-6 w-6" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1 space-y-0.5 text-xs">
+                    <p className="font-black text-[#1E1E1E] font-mono truncate">
+                      {wallet.visa.visaNumber}
+                    </p>
+                    <p className="text-[11px] text-[#77716D] truncate">{wallet.visa.destination}</p>
+                    <p className="text-[10px] text-[#77716D]">
+                      {wallet.visa.visaStatus} · Exp: {wallet.visa.expiry || "N/A"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-2 text-xs text-[#77716D]">
+                  No travel visa attached. Add your visa/e-permit to auto-fill trip destination and
+                  validity.
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 pt-2 border-t border-black/5">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1.5 pt-2 border-t border-black/5">
+              {wallet.visa && signedUrls.visa && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewingPhoto({
+                      url: signedUrls.visa,
+                      title: "Travel Visa Photo",
+                      docNumber: wallet.visa?.visaNumber || "",
+                    })
+                  }
+                  className="flex items-center justify-center gap-1 rounded-xl bg-white border border-[#F6B28F]/30 px-2.5 py-1.5 text-[11px] font-bold text-[#1E1E1E] hover:bg-[#FFF8F3] transition-colors cursor-pointer"
+                  title="View full-size photo"
+                >
+                  <Eye className="h-3 w-3 text-[#FF6F61]" />
+                  <span>View</span>
+                </button>
+              )}
+
               <button
                 onClick={() => openDocModal("visa")}
-                className="flex-1 rounded-xl bg-white border border-[#F6B28F]/30 py-1.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FF6F61] hover:text-white transition-colors cursor-pointer"
+                className="flex-1 rounded-xl bg-white border border-[#F6B28F]/30 py-1.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FF6F61] hover:text-white transition-colors cursor-pointer text-center"
               >
-                {wallet.visa ? "Edit Visa" : "+ Add Visa"}
+                {wallet.visa ? "Edit / Replace" : "+ Add Visa"}
               </button>
+
               {wallet.visa && (
                 <button
                   onClick={() => handleDeleteDocument("visa")}
-                  className="p-1.5 text-[#77716D] hover:text-[#E94B5F] transition-colors"
-                  title="Remove document"
+                  className="rounded-xl bg-black/5 p-1.5 text-[#77716D] hover:bg-[#E94B5F]/15 hover:text-[#E94B5F] transition-colors cursor-pointer"
+                  title="Remove visa"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -411,17 +670,21 @@ function ProfilePage() {
             </div>
           </div>
 
+          {/* ========================================================================= */}
           {/* Card 3: Citizen ID */}
-          <div className="rounded-2xl border border-[#F6B28F]/25 bg-[#FFF8F3] p-4 text-left space-y-3 flex flex-col justify-between">
-            <div className="space-y-1">
+          {/* ========================================================================= */}
+          <div className="rounded-2xl border border-[#F6B28F]/30 bg-[#FFF8F3] p-4 text-left space-y-3 flex flex-col justify-between shadow-xs">
+            <div className="space-y-2.5">
+              {/* Header Status */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-[#1E1E1E] flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />
+                  <IdCard className="h-4 w-4 text-[#FF6F61]" />
                   Citizen ID
                 </span>
                 {wallet.citizenId ? (
-                  <span className="text-[10px] font-black text-[#39B86B] bg-[#39B86B]/15 px-2 py-0.5 rounded-full">
-                    ✓ Saved
+                  <span className="text-[10px] font-black text-[#39B86B] bg-[#39B86B]/15 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>Added ✓</span>
                   </span>
                 ) : (
                   <span className="text-[10px] font-bold text-[#77716D] bg-black/5 px-2 py-0.5 rounded-full">
@@ -429,25 +692,87 @@ function ProfilePage() {
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-[#77716D]">
-                {wallet.citizenId
-                  ? `${wallet.citizenId.idNumber} · ${wallet.citizenId.state}`
-                  : "National ID / Driver's Card"}
-              </p>
+
+              {/* Photo Thumbnail + Details */}
+              {wallet.citizenId ? (
+                <div className="flex items-start gap-3">
+                  {signedUrls.citizenId ? (
+                    <div
+                      onClick={() =>
+                        setViewingPhoto({
+                          url: signedUrls.citizenId,
+                          title: "Citizen ID Photo",
+                          docNumber: wallet.citizenId?.idNumber || "",
+                        })
+                      }
+                      className="relative h-16 w-16 rounded-xl overflow-hidden border border-[#F6B28F]/40 bg-white shadow-xs cursor-pointer group shrink-0"
+                    >
+                      <img
+                        src={signedUrls.citizenId}
+                        alt="Citizen ID Preview"
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                        <Eye className="h-4 w-4 drop-shadow-md" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white border border-[#F6B28F]/30 text-[#FF6F61] shrink-0">
+                      <IdCard className="h-6 w-6" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1 space-y-0.5 text-xs">
+                    <p className="font-black text-[#1E1E1E] font-mono truncate">
+                      {wallet.citizenId.idNumber}
+                    </p>
+                    <p className="text-[11px] text-[#77716D] truncate">
+                      {wallet.citizenId.state || "National ID"}
+                    </p>
+                    <p className="text-[10px] text-[#77716D]">
+                      Exp: {wallet.citizenId.expiry || "Permanent"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-2 text-xs text-[#77716D]">
+                  Optional National ID / Aadhaar card for domestic safety verification.
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 pt-2 border-t border-black/5">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1.5 pt-2 border-t border-black/5">
+              {wallet.citizenId && signedUrls.citizenId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewingPhoto({
+                      url: signedUrls.citizenId,
+                      title: "Citizen ID Photo",
+                      docNumber: wallet.citizenId?.idNumber || "",
+                    })
+                  }
+                  className="flex items-center justify-center gap-1 rounded-xl bg-white border border-[#F6B28F]/30 px-2.5 py-1.5 text-[11px] font-bold text-[#1E1E1E] hover:bg-[#FFF8F3] transition-colors cursor-pointer"
+                  title="View full-size photo"
+                >
+                  <Eye className="h-3 w-3 text-[#FF6F61]" />
+                  <span>View</span>
+                </button>
+              )}
+
               <button
                 onClick={() => openDocModal("citizenId")}
-                className="flex-1 rounded-xl bg-white border border-[#F6B28F]/30 py-1.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FF6F61] hover:text-white transition-colors cursor-pointer"
+                className="flex-1 rounded-xl bg-white border border-[#F6B28F]/30 py-1.5 text-xs font-bold text-[#1E1E1E] hover:bg-[#FF6F61] hover:text-white transition-colors cursor-pointer text-center"
               >
-                {wallet.citizenId ? "Edit ID" : "+ Add Citizen ID"}
+                {wallet.citizenId ? "Edit / Replace" : "+ Add ID"}
               </button>
+
               {wallet.citizenId && (
                 <button
                   onClick={() => handleDeleteDocument("citizenId")}
-                  className="p-1.5 text-[#77716D] hover:text-[#E94B5F] transition-colors"
-                  title="Remove document"
+                  className="rounded-xl bg-black/5 p-1.5 text-[#77716D] hover:bg-[#E94B5F]/15 hover:text-[#E94B5F] transition-colors cursor-pointer"
+                  title="Remove citizen ID"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -458,46 +783,63 @@ function ProfilePage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. YOUR DETAILS SECTION */}
+      {/* 3. PROFILE SETTINGS FORM */}
       {/* ========================================================================= */}
-      <GlassCard className="text-left space-y-4">
-        <div>
-          <h2 className="text-base font-black text-[#1E1E1E]">Personal Account Details</h2>
-          <p className="text-xs text-[#77716D]">
-            Primary contact info synced across your BEACON safety profile.
-          </p>
-        </div>
+      <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/95 p-6 sm:p-8 shadow-sm text-left space-y-4">
+        <h2 className="text-base font-black text-[#1E1E1E]">CONTACT & DETAILS</h2>
 
-        <form onSubmit={saveProfile} className="space-y-4">
-          <Field label="Full name" value={fullName} onChange={setFullName} />
+        <form onSubmit={saveProfile} className="space-y-4 max-w-md">
           <Field
-            label="Phone number"
+            label="Full Name"
+            value={fullName}
+            onChange={setFullName}
+            placeholder="Your name"
+          />
+
+          <Field
+            label="Phone Number"
             value={phone}
             onChange={setPhone}
-            required={false}
             placeholder="+91 98765 43210"
+            required={false}
           />
-          <PressButton type="submit" disabled={busy}>
-            {busy ? "Saving…" : "Save changes"}
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[#1E1E1E]">Email Address</label>
+            <input
+              type="email"
+              disabled
+              value={user?.email ?? ""}
+              className="w-full rounded-2xl border border-black/10 bg-black/5 px-4 py-3 text-xs font-medium text-[#77716D] cursor-not-allowed"
+            />
+          </div>
+
+          <PressButton type="submit" disabled={busy} className="py-3 px-6 text-xs font-black">
+            {busy ? "Saving…" : "Save Changes"}
           </PressButton>
         </form>
-      </GlassCard>
+      </div>
 
       {/* ========================================================================= */}
       {/* 4. SIGN OUT SECTION */}
       {/* ========================================================================= */}
-      <GlassCard transition={{ delay: 0.1, duration: 0.3 }}>
-        <PressButton
-          variant="ghost"
-          onClick={signOut}
-          className="w-full text-xs font-bold text-[#E94B5F] hover:bg-[#FFF5F5]"
+      <div className="rounded-3xl border border-[#F6B28F]/25 bg-white/90 p-5 shadow-xs flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-black text-[#1E1E1E]">Sign Out</h3>
+          <p className="text-[11px] text-[#77716D]">End your session on this device</p>
+        </div>
+
+        <button
+          onClick={() => signOut()}
+          className="flex items-center gap-1.5 rounded-xl bg-[#E94B5F]/10 px-4 py-2 text-xs font-black text-[#E94B5F] hover:bg-[#E94B5F]/20 transition-colors cursor-pointer"
         >
-          <LogOut className="h-4 w-4" /> Sign out of BEACON
-        </PressButton>
-      </GlassCard>
+          <LogOut className="h-4 w-4" />
+          <span>Sign Out</span>
+        </button>
+      </div>
 
       {/* ========================================================================= */}
-      {/* 5. DOCUMENT MANAGEMENT & EXTRACTION MODAL */}
+      {/* 5. DOCUMENT MANAGEMENT & PHOTO UPLOAD MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
         {docModalOpen && editingDocType && (
@@ -513,8 +855,9 @@ function ProfilePage() {
               initial={{ opacity: 0, scale: 0.92, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 15 }}
-              className="fixed inset-x-4 top-[10%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-lg rounded-[32px] border border-[#F6B28F]/40 bg-white p-6 shadow-2xl space-y-4 text-left max-h-[85vh] overflow-y-auto"
+              className="fixed inset-x-4 top-[8%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-lg rounded-[32px] border border-[#F6B28F]/40 bg-white p-6 shadow-2xl space-y-4 text-left max-h-[86vh] overflow-y-auto"
             >
+              {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-black/5 pb-3">
                 <div className="flex items-center gap-2">
                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FF6F61]/15 text-[#FF6F61]">
@@ -523,12 +866,12 @@ function ProfilePage() {
                   <div>
                     <h3 className="text-base font-black text-[#1E1E1E]">
                       {editingDocType === "passport"
-                        ? "Save Passport / Govt ID"
+                        ? "Save Passport & Photo"
                         : editingDocType === "visa"
-                          ? "Save Travel Visa"
-                          : "Save Citizen ID"}
+                          ? "Save Travel Visa & Photo"
+                          : "Save Citizen ID & Photo"}
                     </h3>
-                    <p className="text-xs text-[#77716D]">My Documents Secure Store</p>
+                    <p className="text-xs text-[#77716D]">Secure Document Wallet Storage</p>
                   </div>
                 </div>
                 <button
@@ -539,6 +882,56 @@ function ProfilePage() {
                 </button>
               </div>
 
+              {/* Photo Upload Zone */}
+              <div className="rounded-2xl bg-[#FFF8F3] p-4 border border-[#F6B28F]/30 space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#FF6F61] block">
+                  DOCUMENT PHOTO / SCAN (OPTIONAL)
+                </span>
+
+                {photoPreview ? (
+                  <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-[#F6B28F]/30">
+                    <img
+                      src={photoPreview}
+                      alt="Document Photo Preview"
+                      className="h-16 w-16 object-cover rounded-lg border border-black/10 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-xs font-bold text-[#1E1E1E] truncate">
+                        {selectedFile?.name || "Uploaded Document Image"}
+                      </p>
+                      <p className="text-[10px] text-[#39B86B] font-bold">
+                        ✓ Photo ready for secure storage
+                      </p>
+                    </div>
+                    <label className="rounded-xl bg-[#FFF8F3] border border-[#F6B28F]/40 px-3 py-1.5 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61] hover:text-white transition-colors cursor-pointer">
+                      <span>Replace</span>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-[#F6B28F]/40 rounded-xl bg-white hover:bg-[#FFF8F3] transition-colors cursor-pointer text-center space-y-1.5">
+                    <Camera className="h-6 w-6 text-[#FF6F61]" />
+                    <span className="text-xs font-bold text-[#1E1E1E]">
+                      Upload or take a photo of your {editingDocType}
+                    </span>
+                    <span className="text-[10px] text-[#77716D]">
+                      PNG, JPG or WebP (stored securely in private storage)
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
               {/* Instant Document Extraction Trigger */}
               <div className="rounded-2xl bg-[#FFF8F3] p-3.5 border border-[#F6B28F]/30 space-y-2">
                 <div className="flex items-center justify-between">
@@ -546,11 +939,11 @@ function ProfilePage() {
                     <Sparkles className="h-3.5 w-3.5 text-[#FF6F61]" />
                     Smart Document Extraction
                   </span>
-                  <span className="text-[10px] font-bold text-[#77716D]">AI OCR Ready</span>
+                  <span className="text-[10px] font-bold text-[#77716D]">AI Helper</span>
                 </div>
                 <p className="text-[11px] text-[#77716D]">
                   Automatically extract document reference, nationality, and expiry for 1-click
-                  verification.
+                  auto-fill.
                 </p>
                 <button
                   type="button"
@@ -586,12 +979,14 @@ function ProfilePage() {
                         value={docForm.nationality}
                         onChange={(v) => setDocForm((p) => ({ ...p, nationality: v }))}
                         placeholder="Indian"
+                        required={false}
                       />
                       <Field
                         label="Gender"
                         value={docForm.gender}
                         onChange={(v) => setDocForm((p) => ({ ...p, gender: v }))}
                         placeholder="Male"
+                        required={false}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -600,12 +995,14 @@ function ProfilePage() {
                         type="date"
                         value={docForm.dob}
                         onChange={(v) => setDocForm((p) => ({ ...p, dob: v }))}
+                        required={false}
                       />
                       <Field
                         label="Expiry Date"
                         type="date"
                         value={docForm.expiry}
                         onChange={(v) => setDocForm((p) => ({ ...p, expiry: v }))}
+                        required={false}
                       />
                     </div>
                   </>
@@ -624,6 +1021,7 @@ function ProfilePage() {
                       value={docForm.visaStatus}
                       onChange={(v) => setDocForm((p) => ({ ...p, visaStatus: v }))}
                       placeholder="Tourist / e-Visa (Active)"
+                      required={false}
                     />
                     <Field
                       label="Destination"
@@ -637,12 +1035,14 @@ function ProfilePage() {
                         type="date"
                         value={docForm.validFrom}
                         onChange={(v) => setDocForm((p) => ({ ...p, validFrom: v }))}
+                        required={false}
                       />
                       <Field
                         label="Expiry Date"
                         type="date"
                         value={docForm.expiry}
                         onChange={(v) => setDocForm((p) => ({ ...p, expiry: v }))}
+                        required={false}
                       />
                     </div>
                   </>
@@ -661,12 +1061,14 @@ function ProfilePage() {
                       value={docForm.state}
                       onChange={(v) => setDocForm((p) => ({ ...p, state: v }))}
                       placeholder="Tamil Nadu, India"
+                      required={false}
                     />
                     <Field
                       label="Expiry Date"
                       type="date"
                       value={docForm.expiry}
                       onChange={(v) => setDocForm((p) => ({ ...p, expiry: v }))}
+                      required={false}
                     />
                   </>
                 )}
@@ -681,12 +1083,81 @@ function ProfilePage() {
                   </button>
                   <button
                     type="submit"
-                    className="w-full rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] py-2.5 text-xs font-black text-white shadow-md shadow-[#FF6F61]/25 hover:shadow-lg transition-all cursor-pointer"
+                    disabled={uploadingPhoto}
+                    className="w-full rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] py-2.5 text-xs font-black text-white shadow-md shadow-[#FF6F61]/25 hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    Confirm & Save Document
+                    {uploadingPhoto ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving…</span>
+                      </>
+                    ) : (
+                      <span>Confirm & Save Document</span>
+                    )}
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* 6. FULL-SIZE DOCUMENT PHOTO VIEWER MODAL */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {viewingPhoto && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingPhoto(null)}
+              className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 15 }}
+              className="fixed inset-x-4 top-[10%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 w-full max-w-lg rounded-[32px] border border-[#F6B28F]/40 bg-white p-6 shadow-2xl space-y-4 text-left"
+            >
+              <div className="flex items-center justify-between border-b border-black/5 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FF6F61]/15 text-[#FF6F61]">
+                    <ImageIcon className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-black text-[#1E1E1E]">{viewingPhoto.title}</h3>
+                    <p className="text-xs font-mono font-bold text-[#77716D]">
+                      {viewingPhoto.docNumber}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setViewingPhoto(null)}
+                  className="rounded-full p-1.5 text-[#77716D] hover:bg-black/5 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Full Image Container */}
+              <div className="rounded-2xl overflow-hidden border border-[#F6B28F]/30 bg-[#FFF8F3] max-h-[60vh] flex items-center justify-center p-2">
+                <img
+                  src={viewingPhoto.url}
+                  alt={viewingPhoto.title}
+                  className="max-h-[56vh] w-auto max-w-full object-contain rounded-xl shadow-md"
+                />
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => setViewingPhoto(null)}
+                  className="rounded-2xl bg-gradient-to-r from-[#FF6F61] to-[#F6B28F] px-6 py-2.5 text-xs font-black text-white shadow-md cursor-pointer"
+                >
+                  Close Preview
+                </button>
+              </div>
             </motion.div>
           </>
         )}

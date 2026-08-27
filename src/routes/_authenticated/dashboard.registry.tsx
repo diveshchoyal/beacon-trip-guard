@@ -41,7 +41,7 @@ function Registry() {
       .map((p) => ({ ...p, id_record: ids.find((d) => d.user_id === p.id) ?? null }))
       .filter((r) =>
         term
-          ? r.full_name.toLowerCase().includes(term) ||
+          ? (r.full_name ?? "").toLowerCase().includes(term) ||
             (r.id_record?.destination ?? "").toLowerCase().includes(term) ||
             (r.id_record?.digital_id ?? "").toLowerCase().includes(term)
           : true,

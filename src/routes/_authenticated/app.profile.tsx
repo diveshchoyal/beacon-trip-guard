@@ -492,6 +492,9 @@ function ProfilePage() {
                         src={signedUrls.passport}
                         alt="Passport Preview"
                         className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
                       />
                       <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
                         <Eye className="h-4 w-4 drop-shadow-md" />
@@ -602,6 +605,9 @@ function ProfilePage() {
                         src={signedUrls.visa}
                         alt="Visa Preview"
                         className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
                       />
                       <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
                         <Eye className="h-4 w-4 drop-shadow-md" />
@@ -711,6 +717,9 @@ function ProfilePage() {
                         src={signedUrls.citizenId}
                         alt="Citizen ID Preview"
                         className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
                       />
                       <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
                         <Eye className="h-4 w-4 drop-shadow-md" />
@@ -894,6 +903,9 @@ function ProfilePage() {
                       src={photoPreview}
                       alt="Document Photo Preview"
                       className="h-16 w-16 object-cover rounded-lg border border-black/10 shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
                     />
                     <div className="flex-1 min-w-0 space-y-1">
                       <p className="text-xs font-bold text-[#1E1E1E] truncate">
@@ -1147,6 +1159,9 @@ function ProfilePage() {
                   src={viewingPhoto.url}
                   alt={viewingPhoto.title}
                   className="max-h-[56vh] w-auto max-w-full object-contain rounded-xl shadow-md"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
                 />
               </div>
 

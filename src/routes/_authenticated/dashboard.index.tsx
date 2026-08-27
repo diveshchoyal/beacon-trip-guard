@@ -51,6 +51,7 @@ function LiveMap() {
   const seen = new Set<string>();
   const touristPins: Pin[] = [];
   for (const p of pings) {
+    if (p.lat == null || p.lng == null) continue;
     if (seen.has(p.user_id)) continue;
     seen.add(p.user_id);
     touristPins.push({

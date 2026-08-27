@@ -108,8 +108,8 @@ function TouristHome() {
     connectionState: crowdConnectionState,
     retry: retryCrowd,
   } = useCrowdX({
-    userLat: coords?.lat ?? effective.lat,
-    userLng: coords?.lng ?? effective.lng,
+    userLat: coords?.lat,
+    userLng: coords?.lng,
     hasLocationPermission: geoStatus !== "denied",
   });
 
@@ -157,9 +157,9 @@ function TouristHome() {
 
   // Current zone calculation
   const currentZone = useMemo(() => {
-    const loc = coords ?? effective;
-    return zones.find((z) => inZone(loc, z));
-  }, [zones, coords, effective]);
+    if (!coords) return undefined;
+    return zones.find((z) => inZone(coords, z));
+  }, [zones, coords]);
 
   const risk = currentZone?.risk_level ?? "safe";
 
@@ -167,7 +167,7 @@ function TouristHome() {
   useEffect(() => {
     let active = true;
     async function loadWeather() {
-      if (geoStatus === "denied") {
+      if (!coords || geoStatus === "denied" || geoStatus === "error") {
         if (active) {
           setWeatherData(null);
           setWeatherLoading(false);
@@ -176,10 +176,8 @@ function TouristHome() {
       }
       setWeatherLoading(true);
       try {
-        const targetLat = coords?.lat ?? effective.lat;
-        const targetLng = coords?.lng ?? effective.lng;
         const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${targetLat}&longitude=${targetLng}&current_weather=true`,
+          `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&current_weather=true`,
           { signal: AbortSignal.timeout(5000) },
         );
         if (!res.ok) throw new Error("Weather fetch failed");
@@ -213,7 +211,7 @@ function TouristHome() {
     return () => {
       active = false;
     };
-  }, [coords?.lat, coords?.lng, effective.lat, effective.lng, geoStatus]);
+  }, [coords, geoStatus]);
 
   // Transparent dynamic safety risk calculation based on live signals
   const dynamicSafetyRisk = useMemo(() => {
@@ -358,15 +356,16 @@ function TouristHome() {
   const triggerSos = async () => {
     if (!user) return;
     setSendingSos(true);
-    const targetLoc = coords ?? effective;
     const { error: e } = await supabase.from("alerts").insert({
       user_id: user.id,
       type: "sos",
       message: currentZone
         ? `SOS raised in ${currentZone.name}`
-        : "Emergency SOS raised by tourist",
-      lat: targetLoc.lat,
-      lng: targetLoc.lng,
+        : locationTitle
+          ? `Emergency SOS raised near ${locationTitle}`
+          : "Emergency SOS raised by tourist",
+      lat: coords?.lat ?? null,
+      lng: coords?.lng ?? null,
     });
     setSendingSos(false);
     if (e) {
@@ -382,8 +381,11 @@ function TouristHome() {
 
   // Share live location handler
   const handleShareLocation = async () => {
-    const targetLoc = coords ?? effective;
-    const mapsUrl = `https://www.google.com/maps?q=${targetLoc.lat},${targetLoc.lng}`;
+    if (!coords) {
+      toast.error("Location not acquired yet. Please wait for GPS or tap Refresh.");
+      return;
+    }
+    const mapsUrl = `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
     const text = `BEACON Live Safety Ping: I am currently near ${locationTitle}. Live Map: ${mapsUrl}`;
 
     if (navigator.share) {
@@ -404,7 +406,7 @@ function TouristHome() {
       await navigator.clipboard.writeText(mapsUrl);
       toast.success("Live GPS link copied to clipboard");
     } catch {
-      toast.info(`Your GPS: ${targetLoc.lat.toFixed(4)}, ${targetLoc.lng.toFixed(4)}`);
+      toast.info(`Your GPS: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
     }
   };
 

@@ -37,7 +37,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";
 import { useCrowdX } from "@/hooks/use-crowdx";
-import { COMPREHENSIVE_POLICE_STATIONS, type PoliceStationRecord } from "@/lib/police-stations";
+import {
+  COMPREHENSIVE_POLICE_STATIONS,
+  type PoliceStationRecord,
+  useNearbyPolice,
+} from "@/lib/police-stations";
 
 export const Route = createFileRoute("/_authenticated/app/alerts")({
   component: AlertsModule,
@@ -92,10 +96,13 @@ function AlertsModule() {
     connectionState: crowdConnectionState,
     retry: retryCrowd,
   } = useCrowdX({
-    userLat: coords?.lat ?? effective?.lat ?? 13.0827,
-    userLng: coords?.lng ?? effective?.lng ?? 80.2707,
+    userLat: coords?.lat,
+    userLng: coords?.lng,
     hasLocationPermission: geoStatus !== "denied",
   });
+
+  // Dynamic real-time OSM Overpass/Places nearest police discovery
+  const { nearestPolice } = useNearbyPolice(coords?.lat, coords?.lng);
 
   // Local UI states
   const [activeTab, setActiveTab] = useState<"all" | "active" | "sos" | "advisories">("all");
@@ -151,12 +158,10 @@ function AlertsModule() {
   useEffect(() => {
     let active = true;
     async function loadWeather() {
-      if (geoStatus === "denied") return;
+      if (!coords || geoStatus === "denied" || geoStatus === "error") return;
       try {
-        const targetLat = coords?.lat ?? effective?.lat ?? 13.0827;
-        const targetLng = coords?.lng ?? effective?.lng ?? 80.2707;
         const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${targetLat}&longitude=${targetLng}&current_weather=true`,
+          `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&current_weather=true`,
           { signal: AbortSignal.timeout(5000) },
         );
         if (!res.ok) return;
@@ -186,7 +191,7 @@ function AlertsModule() {
     return () => {
       active = false;
     };
-  }, [coords?.lat, coords?.lng, effective?.lat, effective?.lng, geoStatus]);
+  }, [coords, geoStatus]);
 
   // Load user alerts from Supabase
   const { data: dbAlerts = [], isLoading: alertsLoading } = useQuery({
@@ -220,49 +225,6 @@ function AlertsModule() {
       }
     },
   });
-
-  // Load police stations (merged with comprehensive verified dataset)
-  const { data: dbPoliceStations = [] } = useQuery({
-    queryKey: ["police-stations"],
-    queryFn: async () => {
-      try {
-        const { data, error } = await supabase.from("police_stations").select("id, name, lat, lng");
-        if (error) return [];
-        return data ?? [];
-      } catch {
-        return [];
-      }
-    },
-  });
-
-  const allPoliceStations = useMemo(() => {
-    if (!dbPoliceStations || dbPoliceStations.length === 0) return COMPREHENSIVE_POLICE_STATIONS;
-    const existingIds = new Set(dbPoliceStations.map((s) => s.id));
-    const merged = [...dbPoliceStations];
-    for (const st of COMPREHENSIVE_POLICE_STATIONS) {
-      if (!existingIds.has(st.id)) {
-        merged.push(st);
-      }
-    }
-    return merged;
-  }, [dbPoliceStations]);
-
-  // Nearest police station calculation
-  const nearestPolice = useMemo(() => {
-    if (geoStatus === "denied" || !allPoliceStations || allPoliceStations.length === 0) return null;
-    const targetLoc = coords ?? effective ?? { lat: 13.0827, lng: 80.2707 };
-
-    let best = allPoliceStations[0]!;
-    let bestDist = distanceMeters(targetLoc, { lat: best.lat, lng: best.lng });
-    for (const st of allPoliceStations.slice(1)) {
-      const d = distanceMeters(targetLoc, { lat: st.lat, lng: st.lng });
-      if (d < bestDist) {
-        best = st;
-        bestDist = d;
-      }
-    }
-    return { station: best, distanceMeters: bestDist };
-  }, [allPoliceStations, coords, effective, geoStatus]);
 
   // Real-time Postgres subscription to alerts table
   useEffect(() => {
@@ -308,9 +270,9 @@ function AlertsModule() {
 
   // Current Geofence Zone evaluation
   const currentZone = useMemo(() => {
-    const loc = coords ?? effective ?? { lat: 13.0827, lng: 80.2707 };
-    return zones.find((z) => inZone(loc, z));
-  }, [zones, coords, effective]);
+    if (!coords) return undefined;
+    return zones.find((z) => inZone(coords, z));
+  }, [zones, coords]);
 
   // =========================================================================
   // READ / UNREAD LOGIC
@@ -404,7 +366,6 @@ function AlertsModule() {
     if (!user) return;
     setIsTriggeringSos(true);
 
-    const targetLoc = coords ?? effective ?? { lat: 13.0827, lng: 80.2707 };
     const locName =
       locationTitle !== "Detecting your location..." ? locationTitle : "Live GPS Coordinate";
 
@@ -425,8 +386,8 @@ function AlertsModule() {
       message: currentZone
         ? `Emergency SOS triggered in ${currentZone.name} near ${locName}${idTag}`
         : `Emergency SOS triggered near ${locName}${idTag}`,
-      lat: targetLoc.lat,
-      lng: targetLoc.lng,
+      lat: coords?.lat ?? null,
+      lng: coords?.lng ?? null,
       status: "active",
     });
 
@@ -440,7 +401,7 @@ function AlertsModule() {
     toast.success("EMERGENCY SOS LOGGED — Authorities notified with live coordinates");
     void queryClient.invalidateQueries({ queryKey: ["my-alerts"] });
     void queryClient.invalidateQueries({ queryKey: ["unread-alerts-count"] });
-  }, [user, coords, effective, locationTitle, currentZone, queryClient]);
+  }, [user, coords, locationTitle, currentZone, queryClient]);
 
   // 3-Second Countdown Effect
   useEffect(() => {
@@ -1576,7 +1537,7 @@ function AlertsModule() {
                   Coordinates:{" "}
                   {coords
                     ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
-                    : `${effective?.lat?.toFixed(4) ?? "13.0827"}, ${effective?.lng?.toFixed(4) ?? "80.2707"}`}
+                    : "Acquiring GPS fix..."}
                 </p>
               </div>
 

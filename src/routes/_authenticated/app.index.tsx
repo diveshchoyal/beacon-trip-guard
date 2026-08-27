@@ -15,6 +15,7 @@ import {
   Map as MapIcon,
   MapPin,
   Radio,
+  RefreshCw,
   Share2,
   Shield,
   ShieldAlert,
@@ -28,29 +29,21 @@ import {
 import { toast } from "sonner";
 
 import logo from "@/assets/beacon-logo.png";
-import mascotImg from "@/assets/tourist-mascot.png";
+import mascotImg from "@/assets/tourist-mascot-v2.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";
 import { useCrowdX } from "@/hooks/use-crowdx";
+import {
+  COMPREHENSIVE_POLICE_STATIONS,
+  type PoliceStationRecord,
+  findNearestPoliceStation,
+  useNearbyPolice,
+} from "@/lib/police-stations";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
 });
-
-// Real police station dataset across Tamil Nadu / Chennai for real-time proximity calculation
-const CHENNAI_POLICE_STATIONS = [
-  { id: "ps_01", name: "Marina Beach Police Station (D5)", lat: 13.0512, lng: 80.2818 },
-  { id: "ps_02", name: "Triplicane Police Station (D1)", lat: 13.0592, lng: 80.2741 },
-  { id: "ps_03", name: "Mylapore Police Station (E1)", lat: 13.0337, lng: 80.2678 },
-  { id: "ps_04", name: "Royapettah Police Station (E2)", lat: 13.0566, lng: 80.2612 },
-  { id: "ps_05", name: "Saidapet Police Station (J1)", lat: 13.021, lng: 80.223 },
-  { id: "ps_06", name: "T. Nagar Police Station (R1)", lat: 13.0418, lng: 80.2337 },
-  { id: "ps_07", name: "Guindy Police Station (J3)", lat: 13.0067, lng: 80.212 },
-  { id: "ps_08", name: "Besant Nagar Police Station (J5)", lat: 12.998, lng: 80.266 },
-  { id: "ps_09", name: "Anna Nagar Police Station (K4)", lat: 13.085, lng: 80.218 },
-  { id: "ps_10", name: "Chennai Central Railway Police Post", lat: 13.0827, lng: 80.2755 },
-];
 
 // Safety tips presets for modal
 const SAFETY_TIPS = [
@@ -59,24 +52,28 @@ const SAFETY_TIPS = [
     desc: "Dial 1363 (24x7 Multi-lingual toll-free Tourist Helpline) or 112 for all police and medical emergencies in Tamil Nadu.",
   },
   {
-    title: "Verified Transport",
-    desc: "Always use prepaid airport/railway taxi counters or registered ride-hailing apps for safe and monitored commutes.",
-  },
-  {
     title: "Digital ID Verification",
-    desc: "Keep your QR Digital ID readily accessible on BEACON for swift verification at tourist checkpoints and monuments.",
+    desc: "Always present your official BEACON QR Digital ID to verified Tamil Nadu Police officers for instant tamper-proof clearance.",
   },
   {
-    title: "Geofence Notifications",
-    desc: "Stay alert if you receive an automated notification when entering caution or restricted zones after dusk.",
+    title: "Live Crowd Intelligence",
+    desc: "Check real-time pedestrian density meters before visiting popular tourist hubs like Marina Beach, Kasimedu Harbour, or Tondiarpet.",
+  },
+  {
+    title: "Two-Way Voice Translation",
+    desc: "Use the built-in AI Voice Translator for effortless communication with local authorities in Tamil, Hindi, and English.",
   },
 ];
 
 function TouristHome() {
   const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Central Authoritative Location State (Single Source of Truth)
   const {
     effective,
     coords,
+    accuracy,
     error: geoError,
     geoStatus,
     locationTitle,
@@ -85,13 +82,13 @@ function TouristHome() {
     stateCountry,
     requestLocation,
   } = useGeolocation();
-  const queryClient = useQueryClient();
 
   // Local state
   const [sendingSos, setSendingSos] = useState(false);
   const [sosSent, setSosSent] = useState(false);
   const [safetyTipsOpen, setSafetyTipsOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherData, setWeatherData] = useState<{
     temp: number;
     text: string;
@@ -111,9 +108,9 @@ function TouristHome() {
     connectionState: crowdConnectionState,
     retry: retryCrowd,
   } = useCrowdX({
-    userLat: effective.lat,
-    userLng: effective.lng,
-    hasLocationPermission: !geoError,
+    userLat: coords?.lat,
+    userLng: coords?.lng,
+    hasLocationPermission: geoStatus !== "denied",
   });
 
   // Load geofence zones from Supabase
@@ -126,46 +123,21 @@ function TouristHome() {
     },
   });
 
-  // Load police stations from Supabase (with fallback to verified stations)
-  const { data: dbPoliceStations = [] } = useQuery({
-    queryKey: ["police-stations"],
-    queryFn: async () => {
-      const { data, error: e } = await supabase
-        .from("police_stations")
-        .select("id, name, lat, lng");
-      if (e) return [];
-      return data ?? [];
-    },
-  });
-
-  const allPoliceStations = useMemo(() => {
-    return dbPoliceStations.length > 0 ? dbPoliceStations : CHENNAI_POLICE_STATIONS;
-  }, [dbPoliceStations]);
-
-  // Real-time calculation of nearest police station to current GPS
-  const nearestPolice = useMemo(() => {
-    if (geoError || allPoliceStations.length === 0) return null;
-    let best = allPoliceStations[0]!;
-    let bestDist = distanceMeters(effective, { lat: best.lat, lng: best.lng });
-    for (const st of allPoliceStations.slice(1)) {
-      const d = distanceMeters(effective, { lat: st.lat, lng: st.lng });
-      if (d < bestDist) {
-        best = st;
-        bestDist = d;
-      }
-    }
-    return { station: best, distanceMeters: bestDist };
-  }, [allPoliceStations, effective, geoError]);
+  // Dynamic real-time OSM Overpass/Places nearest police discovery
+  const {
+    nearestPolice,
+    loading: policeLoading,
+    refetch: refetchPolice,
+  } = useNearbyPolice(coords?.lat, coords?.lng);
 
   // Formatted sensible distance string for nearest police
   const policeDistanceLabel = useMemo(() => {
+    if (geoStatus === "denied") return "Location Required";
+    if (geoStatus === "error") return "Unavailable";
+    if (geoStatus === "locating" || policeLoading) return "Finding...";
     if (!nearestPolice) return "Unavailable";
-    const m = nearestPolice.distanceMeters;
-    if (m < 1000) {
-      return `${Math.round(m)} m`;
-    }
-    return `${(m / 1000).toFixed(1)} km`;
-  }, [nearestPolice]);
+    return nearestPolice.distanceFormatted;
+  }, [nearestPolice, geoStatus, policeLoading]);
 
   // Query unread alerts count
   const { data: unreadAlertsCount = 0 } = useQuery({
@@ -184,23 +156,28 @@ function TouristHome() {
   });
 
   // Current zone calculation
-  const currentZone = useMemo(() => zones.find((z) => inZone(effective, z)), [zones, effective]);
+  const currentZone = useMemo(() => {
+    if (!coords) return undefined;
+    return zones.find((z) => inZone(coords, z));
+  }, [zones, coords]);
 
   const risk = currentZone?.risk_level ?? "safe";
 
-  // Real weather fetch from Open-Meteo with no fake fallback
+  // Real weather fetch from Open-Meteo with no fake fallbacks
   useEffect(() => {
     let active = true;
     async function loadWeather() {
-      if (geoError) {
-        if (active) setWeatherData(null);
+      if (!coords || geoStatus === "denied" || geoStatus === "error") {
+        if (active) {
+          setWeatherData(null);
+          setWeatherLoading(false);
+        }
         return;
       }
+      setWeatherLoading(true);
       try {
-        const lat = effective.lat;
-        const lng = effective.lng;
         const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`,
+          `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&current_weather=true`,
           { signal: AbortSignal.timeout(5000) },
         );
         if (!res.ok) throw new Error("Weather fetch failed");
@@ -221,10 +198,12 @@ function TouristHome() {
           else if (code >= 95 && code <= 99) text = "Thunderstorm";
 
           setWeatherData({ temp, text, weatherCode: code, windSpeed });
+          setWeatherLoading(false);
         }
       } catch {
         if (active) {
           setWeatherData(null);
+          setWeatherLoading(false);
         }
       }
     }
@@ -232,11 +211,22 @@ function TouristHome() {
     return () => {
       active = false;
     };
-  }, [effective.lat, effective.lng, geoError]);
+  }, [coords, geoStatus]);
 
   // Transparent dynamic safety risk calculation based on live signals
   const dynamicSafetyRisk = useMemo(() => {
-    if (geoError && !currentZone) {
+    if (geoStatus === "locating" && !coords) {
+      return {
+        title: "Calculating...",
+        subtitle: "Assessing area safety signals",
+        level: "calculating" as const,
+        colorClass: "text-[#77716D]",
+        badgeBg: "bg-black/5",
+        icon: Shield,
+      };
+    }
+
+    if (geoStatus === "denied" && !currentZone) {
       return {
         title: "Risk Unavailable",
         subtitle: "Location required for assessment",
@@ -314,7 +304,41 @@ function TouristHome() {
         icon: ShieldCheck,
       };
     }
-  }, [geoError, currentZone, unreadAlertsCount, crowdLevel, weatherData, nearestPolice]);
+  }, [geoStatus, coords, currentZone, unreadAlertsCount, crowdLevel, weatherData, nearestPolice]);
+
+  // Real Dynamic Safety Score Calculation (0 - 100)
+  const liveSafetyScore = useMemo(() => {
+    let score = 96; // Optimal baseline in safe conditions
+
+    // 1. Geofence zone risk signal
+    if (currentZone?.risk_level === "restricted") score -= 35;
+    else if (currentZone?.risk_level === "caution") score -= 18;
+
+    // 2. Active alerts in area
+    if (unreadAlertsCount >= 3) score -= 30;
+    else if (unreadAlertsCount >= 1) score -= 15;
+
+    // 3. Crowd density factor from CrowdX YOLO
+    if (crowdLevel === "Very Busy") score -= 15;
+    else if (crowdLevel === "Busy") score -= 8;
+
+    // 4. Weather severity factor
+    if (
+      weatherData &&
+      (weatherData.weatherCode >= 95 ||
+        weatherData.weatherCode === 65 ||
+        weatherData.weatherCode === 82)
+    ) {
+      score -= 15;
+    }
+
+    // 5. Police proximity buffer
+    if (nearestPolice && nearestPolice.distanceMeters > 5000) {
+      score -= 8;
+    }
+
+    return Math.max(15, Math.min(100, Math.round(score)));
+  }, [currentZone, unreadAlertsCount, crowdLevel, weatherData, nearestPolice]);
 
   // Persist location ping every 2 minutes for responders
   useEffect(() => {
@@ -337,9 +361,11 @@ function TouristHome() {
       type: "sos",
       message: currentZone
         ? `SOS raised in ${currentZone.name}`
-        : "Emergency SOS raised by tourist",
-      lat: effective.lat,
-      lng: effective.lng,
+        : locationTitle
+          ? `Emergency SOS raised near ${locationTitle}`
+          : "Emergency SOS raised by tourist",
+      lat: coords?.lat ?? null,
+      lng: coords?.lng ?? null,
     });
     setSendingSos(false);
     if (e) {
@@ -355,8 +381,12 @@ function TouristHome() {
 
   // Share live location handler
   const handleShareLocation = async () => {
-    const mapsUrl = `https://www.google.com/maps?q=${effective.lat},${effective.lng}`;
-    const text = `BEACON Live Safety Ping: I am currently at ${currentZone?.name ?? "Tamil Nadu, India"}. Live Map: ${mapsUrl}`;
+    if (!coords) {
+      toast.error("Location not acquired yet. Please wait for GPS or tap Refresh.");
+      return;
+    }
+    const mapsUrl = `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
+    const text = `BEACON Live Safety Ping: I am currently near ${locationTitle}. Live Map: ${mapsUrl}`;
 
     if (navigator.share) {
       try {
@@ -376,7 +406,7 @@ function TouristHome() {
       await navigator.clipboard.writeText(mapsUrl);
       toast.success("Live GPS link copied to clipboard");
     } catch {
-      toast.info(`Your GPS: ${effective.lat.toFixed(4)}, ${effective.lng.toFixed(4)}`);
+      toast.info(`Your GPS: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
     }
   };
 
@@ -488,7 +518,7 @@ function TouristHome() {
         <div className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-gradient-to-tr from-[#F6B28F]/15 to-[#FF6F61]/10 blur-3xl" />
 
         <div className="relative grid grid-cols-1 lg:grid-cols-12 items-center gap-8 lg:gap-6">
-          {/* Left Column: Personalized Greeting + Dynamic Status & Current Location (5 Cols) */}
+          {/* Left Column: Personalized Greeting + Dynamic Status (5 Cols) */}
           <div className="lg:col-span-5 space-y-5 text-left">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-[#FF6F61]/10 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-[#FF6F61] border border-[#FF6F61]/20">
@@ -508,134 +538,186 @@ function TouristHome() {
               </p>
             </div>
 
-            {/* Prominent Current Location Card (Live Device GPS + Reverse Geocoded) */}
-            <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 sm:p-5 shadow-[0_8px_25px_rgba(255,111,97,0.06)] backdrop-blur-md">
-              <div className="flex items-center justify-between gap-2 border-b border-black/5 pb-2.5">
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D] flex items-center gap-1.5">
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      geoStatus === "success"
-                        ? "bg-[#39B86B] animate-ping"
-                        : geoStatus === "locating"
-                          ? "bg-[#F2A93B] animate-pulse"
-                          : "bg-[#77716D]"
-                    }`}
-                  />
-                  CURRENT LOCATION
-                </span>
+            {/* Quick Status Pill + Safety Tips Trigger */}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <div className="flex items-center gap-2 rounded-2xl bg-white/90 border border-[#F6B28F]/30 px-3.5 py-2 text-xs font-bold text-[#1E1E1E] shadow-sm">
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                  className={`h-2.5 w-2.5 rounded-full ${
                     risk === "restricted"
-                      ? "bg-[#E94B5F]/15 text-[#E94B5F]"
+                      ? "bg-[#E94B5F]"
                       : risk === "caution"
-                        ? "bg-[#F2A93B]/15 text-[#F2A93B]"
-                        : "bg-[#39B86B]/15 text-[#39B86B]"
+                        ? "bg-[#F2A93B]"
+                        : "bg-[#39B86B] animate-pulse"
                   }`}
-                >
+                />
+                <span>
+                  {risk === "restricted"
+                    ? "Restricted Area"
+                    : risk === "caution"
+                      ? "Caution Area"
+                      : "Safe Area Zone"}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSafetyTipsOpen(true)}
+                className="flex items-center gap-1.5 rounded-2xl bg-[#FF6F61]/10 border border-[#FF6F61]/20 px-3.5 py-2 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-all cursor-pointer"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Safety Tips</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Center Mascot Character + Live Circular Safety Score Gauge (4 Cols) */}
+          <div className="lg:col-span-4 relative flex flex-col items-center justify-center py-2 select-none">
+            {/* Live Circular Safety Score Gauge Badge */}
+            <div className="relative mb-3 flex items-center gap-3 rounded-2xl border border-[#F6B28F]/35 bg-white/95 px-3.5 py-2 shadow-md backdrop-blur-md">
+              <div className="relative flex h-11 w-11 items-center justify-center shrink-0">
+                <svg className="h-11 w-11 -rotate-90 transform" viewBox="0 0 48 48">
+                  {/* Background Circle Track */}
+                  <circle
+                    cx="24"
+                    cy="24"
+                    r="18"
+                    className="stroke-black/5"
+                    strokeWidth="3.5"
+                    fill="none"
+                  />
+                  {/* Active Progress Ring */}
+                  <circle
+                    cx="24"
+                    cy="24"
+                    r="18"
+                    stroke={
+                      liveSafetyScore >= 85
+                        ? "#39B86B"
+                        : liveSafetyScore >= 65
+                          ? "#F2A93B"
+                          : "#E94B5F"
+                    }
+                    strokeWidth="3.5"
+                    strokeDasharray={2 * Math.PI * 18}
+                    strokeDashoffset={2 * Math.PI * 18 * (1 - liveSafetyScore / 100)}
+                    strokeLinecap="round"
+                    fill="none"
+                    className="transition-all duration-700 ease-out"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-[13px] font-black text-[#1E1E1E] leading-none">
+                    {liveSafetyScore}
+                  </span>
+                  <span className="text-[7px] font-black uppercase text-[#77716D] leading-none mt-0.5">
+                    /100
+                  </span>
+                </div>
+              </div>
+              <div className="text-left pr-1">
+                <div className="flex items-center gap-1">
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${
-                      risk === "restricted"
-                        ? "bg-[#E94B5F]"
-                        : risk === "caution"
-                          ? "bg-[#F2A93B]"
-                          : "bg-[#39B86B]"
+                      liveSafetyScore >= 85
+                        ? "bg-[#39B86B] animate-ping"
+                        : liveSafetyScore >= 65
+                          ? "bg-[#F2A93B] animate-pulse"
+                          : "bg-[#E94B5F] animate-pulse"
                     }`}
                   />
-                  {risk === "restricted"
-                    ? "Restricted Zone"
-                    : risk === "caution"
-                      ? "Caution Zone"
-                      : "Safe Zone"}
-                </span>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-[#FF6F61]">
+                    LIVE SAFETY SCORE
+                  </span>
+                </div>
+                <p className="text-xs font-black text-[#1E1E1E]">
+                  {liveSafetyScore >= 85
+                    ? "Optimal · Safe Area"
+                    : liveSafetyScore >= 65
+                      ? "Moderate Caution"
+                      : "Elevated Risk"}
+                </p>
+              </div>
+            </div>
+
+            {/* Mascot Container with Ambient Glow & Breathing Animation */}
+            <div className="relative flex flex-col items-center justify-center">
+              {/* Soft Ambient Glow */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="h-44 w-44 rounded-full bg-gradient-to-br from-[#FF6F61]/10 via-[#F6B28F]/15 to-transparent blur-2xl" />
               </div>
 
-              <div className="mt-3 flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[#FF6F61]/10 text-[#FF6F61]">
-                  <MapPin className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="truncate text-sm sm:text-base font-black text-[#1E1E1E]"
-                    title={locationTitle}
-                  >
-                    {locationTitle}
-                  </p>
-                  <p className="mt-0.5 text-xs text-[#77716D] truncate">{locationSublabel}</p>
-                </div>
-              </div>
+              {/* Synchronized Soft Ground Shadow */}
+              <motion.div
+                animate={{
+                  scale: [1, 0.94, 1],
+                  opacity: [0.28, 0.18, 0.28],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 6,
+                  ease: "easeInOut",
+                }}
+                className="absolute bottom-1 left-1/2 -translate-x-1/2 h-3.5 w-28 rounded-full bg-[#FF6F61]/20 blur-md pointer-events-none"
+              />
 
-              {/* Location fallback button if permission not granted or GPS signal needs refresh */}
-              {geoStatus !== "success" && (
-                <button
-                  onClick={requestLocation}
-                  className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-xl bg-[#FF6F61]/10 py-1.5 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-colors cursor-pointer"
-                >
-                  <Radio className="h-3.5 w-3.5 animate-pulse" />
-                  <span>{geoStatus === "denied" ? "Enable Location" : "Refresh GPS Signal"}</span>
-                </button>
-              )}
+              {/* Clean Flat-Style Mascot Illustration */}
+              <motion.img
+                src={mascotImg}
+                alt="BEACON Tourist Mascot"
+                animate={{
+                  y: [0, -4, 0],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 6,
+                  ease: "easeInOut",
+                }}
+                className="relative z-10 h-52 sm:h-60 lg:h-64 w-auto object-contain drop-shadow-md"
+              />
             </div>
           </div>
 
-          {/* Center 3D Mascot Character on 3D Earth Globe (4 Cols) */}
-          <div className="lg:col-span-4 relative flex flex-col items-center justify-center py-4 select-none">
-            {/* Soft Ambient Atmosphere behind Globe (No wireframe lines) */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="h-56 w-56 sm:h-64 sm:w-64 rounded-full bg-gradient-to-br from-[#FF6F61]/10 via-[#F6B28F]/15 to-transparent blur-2xl" />
-            </div>
-
-            {/* Synchronized Soft Ground Shadow */}
-            <motion.div
-              animate={{
-                scale: [1, 0.94, 1],
-                opacity: [0.28, 0.18, 0.28],
-              }}
-              transition={{
-                repeat: Infinity,
-                duration: 6,
-                ease: "easeInOut",
-              }}
-              className="absolute bottom-2 left-1/2 -translate-x-1/2 h-5 w-32 rounded-full bg-[#FF6F61]/20 blur-md pointer-events-none"
-            />
-
-            {/* Stable, Natural 3D Tourist Character on 3D Earth Globe */}
-            <motion.img
-              src={mascotImg}
-              alt="BEACON 3D Tourist on Earth Globe"
-              animate={{
-                y: [0, -4, 0],
-              }}
-              transition={{
-                repeat: Infinity,
-                duration: 6,
-                ease: "easeInOut",
-              }}
-              className="relative z-10 h-60 sm:h-68 lg:h-76 w-auto object-contain drop-shadow-2xl"
-            />
-          </div>
-
-          {/* Right Column: Floating Live Location & Coordinates Card (3 Cols) */}
+          {/* Right Column: Single Unified Live Location & Coordinates Card (3 Cols) */}
           <div className="lg:col-span-3 flex flex-col justify-center">
             <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-5 shadow-[0_10px_30px_rgba(255,111,97,0.08)] backdrop-blur-md space-y-4">
               <div className="flex items-center justify-between border-b border-black/5 pb-2.5">
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#77716D]">
                   YOUR LOCATION
                 </span>
-                {geoStatus === "success" ? (
-                  <span className="flex items-center gap-1 text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
-                    <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
-                    LIVE
-                  </span>
-                ) : geoStatus === "locating" ? (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-[#F2A93B] uppercase tracking-wider">
-                    <span className="h-2 w-2 rounded-full bg-[#F2A93B] animate-pulse" />
-                    DETECTING
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold text-[#77716D] uppercase tracking-wider">
-                    OFFLINE
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      requestLocation();
+                      refetchPolice();
+                    }}
+                    className="flex items-center gap-1 text-[10px] font-bold text-[#FF6F61] hover:underline cursor-pointer"
+                    title="Refresh live GPS coordinates"
+                  >
+                    <RefreshCw className="h-2.5 w-2.5" />
+                    <span>Refresh</span>
+                  </button>
+                  {geoStatus === "success" ? (
+                    <span className="flex items-center gap-1 text-[10px] font-black text-[#39B86B] uppercase tracking-wider">
+                      <span className="h-2 w-2 rounded-full bg-[#39B86B] animate-ping" />
+                      LIVE GPS
+                    </span>
+                  ) : geoStatus === "locating" ? (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#F2A93B] uppercase tracking-wider">
+                      <span className="h-2 w-2 rounded-full bg-[#F2A93B] animate-pulse" />
+                      DETECTING
+                    </span>
+                  ) : geoStatus === "denied" ? (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#E94B5F] uppercase tracking-wider">
+                      <span className="h-2 w-2 rounded-full bg-[#E94B5F]" />
+                      DISABLED
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-[#77716D] uppercase tracking-wider">
+                      OFFLINE
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Geographic Details */}
@@ -649,32 +731,46 @@ function TouristHome() {
               </div>
 
               {/* Live Coordinates */}
-              <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[#FFF8F3] p-2.5 border border-[#F6B28F]/20 text-[11px]">
-                <div>
-                  <span className="text-[9px] font-black uppercase text-[#77716D] block">
-                    Latitude
-                  </span>
-                  <span className="font-mono font-bold text-[#1E1E1E]">
-                    {coords
-                      ? `${coords.lat.toFixed(4)}° N`
-                      : effective.lat
-                        ? `${effective.lat.toFixed(4)}° N`
-                        : "—"}
-                  </span>
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[#FFF8F3] p-2.5 border border-[#F6B28F]/20 text-[11px]">
+                  <div>
+                    <span className="text-[9px] font-black uppercase text-[#77716D] block">
+                      Latitude
+                    </span>
+                    <span className="font-mono font-bold text-[#1E1E1E]">
+                      {coords?.lat ? `${coords.lat.toFixed(4)}° N` : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-black uppercase text-[#77716D] block">
+                      Longitude
+                    </span>
+                    <span className="font-mono font-bold text-[#1E1E1E]">
+                      {coords?.lng ? `${coords.lng.toFixed(4)}° E` : "—"}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[9px] font-black uppercase text-[#77716D] block">
-                    Longitude
-                  </span>
-                  <span className="font-mono font-bold text-[#1E1E1E]">
-                    {coords
-                      ? `${coords.lng.toFixed(4)}° E`
-                      : effective.lng
-                        ? `${effective.lng.toFixed(4)}° E`
-                        : "—"}
-                  </span>
-                </div>
+                {typeof accuracy === "number" && coords && (
+                  <p className="text-[10px] text-right font-medium text-[#77716D] pr-1">
+                    GPS Accuracy: ±{Math.round(accuracy)}m
+                  </p>
+                )}
               </div>
+
+              {/* Retry button for permission denied or error states */}
+              {(geoStatus === "denied" || geoStatus === "error") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    requestLocation();
+                    refetchPolice();
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-[#FF6F61]/10 border border-[#FF6F61]/25 py-2 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-all cursor-pointer"
+                >
+                  <Radio className="h-3.5 w-3.5 animate-pulse" />
+                  <span>{geoStatus === "denied" ? "Retry Permission" : "Retry GPS Fix"}</span>
+                </button>
+              )}
 
               {/* View on Map CTA Button */}
               <Link
@@ -726,7 +822,7 @@ function TouristHome() {
                 </span>
               ) : crowdConnectionState === "OFFLINE" ? (
                 <span className="flex items-center gap-1 text-[9px] font-bold text-[#77716D] uppercase tracking-wider">
-                  ○ OFFLINE
+                  ○ SENSOR OFFLINE
                 </span>
               ) : crowdConnectionState === "CONNECTING" ? (
                 <span className="flex items-center gap-1 text-[9px] font-bold text-[#F2A93B] uppercase tracking-wider">
@@ -752,9 +848,9 @@ function TouristHome() {
                 )}
               </>
             ) : crowdConnectionState === "DENIED" ? (
-              <span className="text-sm font-bold text-[#77716D]">Location Denied</span>
+              <span className="text-sm font-bold text-[#77716D]">Location Required</span>
             ) : crowdConnectionState === "OFFLINE" ? (
-              <span className="text-sm font-bold text-[#77716D]">Offline</span>
+              <span className="text-sm font-bold text-[#77716D]">Live Sensor Offline</span>
             ) : (
               <span className="text-sm font-bold text-[#77716D]">Connecting...</span>
             )}
@@ -766,9 +862,9 @@ function TouristHome() {
               {isCrowdLive && crowdDetectedCount !== null
                 ? `${crowdDetectedCount} ${crowdDetectedCount === 1 ? "person" : "people"} detected`
                 : crowdConnectionState === "DENIED"
-                  ? "Enable location to see nearby crowd conditions"
+                  ? "Enable location to see nearby crowd"
                   : crowdConnectionState === "OFFLINE"
-                    ? "Crowd monitoring unavailable"
+                    ? "Live crowd sensing unavailable"
                     : "Connecting to YOLO stream..."}
             </p>
 
@@ -783,7 +879,7 @@ function TouristHome() {
                   className="font-bold text-[#FF6F61] hover:underline cursor-pointer flex items-center gap-0.5"
                   title="Retry live stream connection"
                 >
-                  <span>Retry</span>
+                  <span>↺ Retry</span>
                 </button>
               ) : (
                 <span className="shrink-0 font-medium">{crowdFreshnessText}</span>
@@ -792,7 +888,7 @@ function TouristHome() {
           </div>
         </div>
 
-        {/* Card 3: NEARBY POLICE (Real Calculated Distance) */}
+        {/* Card 3: NEARBY POLICE (Real Calculated Distance from Dynamic GPS) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
@@ -804,13 +900,19 @@ function TouristHome() {
           </div>
           <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">{policeDistanceLabel}</p>
           <p className="mt-0.5 text-xs text-blue-600 font-bold truncate">
-            {nearestPolice
-              ? `${nearestPolice.station.name} · Open 24/7`
-              : "Police location unavailable"}
+            {geoStatus === "denied"
+              ? "Enable GPS to find police"
+              : geoStatus === "error"
+                ? "GPS signal lost"
+                : geoStatus === "locating" || policeLoading
+                  ? "Finding nearby police..."
+                  : nearestPolice
+                    ? `${nearestPolice.station.name} · Open 24/7`
+                    : "No police stations nearby"}
           </p>
         </div>
 
-        {/* Card 4: WEATHER (Real Open-Meteo Weather) */}
+        {/* Card 4: WEATHER (Real Open-Meteo Weather from Central GPS) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
@@ -821,10 +923,14 @@ function TouristHome() {
             </div>
           </div>
           <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">
-            {weatherData ? `${weatherData.temp}°C` : "Unavailable"}
+            {weatherLoading ? "Loading..." : weatherData ? `${weatherData.temp}°C` : "Unavailable"}
           </p>
           <p className="mt-0.5 text-xs text-[#77716D] font-bold truncate">
-            {weatherData ? weatherData.text : "Weather unavailable"}
+            {weatherLoading
+              ? "Loading weather..."
+              : weatherData
+                ? weatherData.text
+                : "Weather unavailable"}
           </p>
         </div>
       </div>

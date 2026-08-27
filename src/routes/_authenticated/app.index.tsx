@@ -33,7 +33,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";
 import { useCrowdX } from "@/hooks/use-crowdx";
-import { COMPREHENSIVE_POLICE_STATIONS, type PoliceStationRecord } from "@/lib/police-stations";
+import {
+  COMPREHENSIVE_POLICE_STATIONS,
+  type PoliceStationRecord,
+  findNearestPoliceStation,
+} from "@/lib/police-stations";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   component: TouristHome,
@@ -130,12 +134,20 @@ function TouristHome() {
 
   const allPoliceStations = useMemo(() => {
     if (dbPoliceStations.length === 0) return COMPREHENSIVE_POLICE_STATIONS;
-    // Merge DB stations with comprehensive directory
-    const existingIds = new Set(dbPoliceStations.map((s) => s.id));
-    const merged = [...dbPoliceStations];
-    for (const st of COMPREHENSIVE_POLICE_STATIONS) {
-      if (!existingIds.has(st.id)) {
-        merged.push(st);
+    // Prioritize high-precision comprehensive stations and augment with any custom DB records
+    const knownNames = new Set(
+      COMPREHENSIVE_POLICE_STATIONS.map((s) => s.name.toLowerCase().trim()),
+    );
+    const merged = [...COMPREHENSIVE_POLICE_STATIONS];
+    for (const dbSt of dbPoliceStations) {
+      if (!knownNames.has(dbSt.name.toLowerCase().trim())) {
+        merged.push({
+          id: dbSt.id,
+          name: dbSt.name,
+          lat: dbSt.lat,
+          lng: dbSt.lng,
+          division: "Local Police Station",
+        });
       }
     }
     return merged;
@@ -147,27 +159,15 @@ function TouristHome() {
     const targetLoc = coords ?? effective;
     if (!targetLoc) return null;
 
-    let best = allPoliceStations[0]!;
-    let bestDist = distanceMeters(targetLoc, { lat: best.lat, lng: best.lng });
-    for (const st of allPoliceStations.slice(1)) {
-      const d = distanceMeters(targetLoc, { lat: st.lat, lng: st.lng });
-      if (d < bestDist) {
-        best = st;
-        bestDist = d;
-      }
-    }
-    return { station: best, distanceMeters: bestDist };
+    return findNearestPoliceStation(targetLoc.lat, targetLoc.lng, allPoliceStations);
   }, [allPoliceStations, coords, effective, geoStatus]);
 
   // Formatted sensible distance string for nearest police
   const policeDistanceLabel = useMemo(() => {
     if (geoStatus === "locating" && !coords) return "Finding...";
+    if (geoStatus === "denied") return "Location Required";
     if (!nearestPolice) return "Unavailable";
-    const m = nearestPolice.distanceMeters;
-    if (m < 1000) {
-      return `${Math.round(m)} m`;
-    }
-    return `${(m / 1000).toFixed(1)} km`;
+    return nearestPolice.distanceFormatted;
   }, [nearestPolice, geoStatus, coords]);
 
   // Query unread alerts count

@@ -28,7 +28,7 @@ import {
 import { toast } from "sonner";
 
 import logo from "@/assets/beacon-logo.png";
-import mascotImg from "@/assets/tourist-mascot.png";
+import mascotImg from "@/assets/tourist-mascot-v2.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useGeolocation, inZone, distanceMeters } from "@/hooks/use-geolocation";

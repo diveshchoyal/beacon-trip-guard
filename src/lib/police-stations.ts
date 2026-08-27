@@ -802,7 +802,11 @@ export function useNearbyPolice(lat?: number | null, lng?: number | null) {
     station: PoliceStationRecord;
     distanceMeters: number;
     distanceFormatted: string;
-  } | null>(null);
+  } | null>(() => {
+    const targetLat = typeof lat === "number" ? lat : 13.1258;
+    const targetLng = typeof lng === "number" ? lng : 80.2895;
+    return findNearestPoliceStation(targetLat, targetLng);
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastQueryRef = useRef<string | null>(null);

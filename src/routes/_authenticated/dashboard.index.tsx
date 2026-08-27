@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { BeaconMap } from "@/components/map/beacon-map";
-import { DEFAULT_CENTER } from "@/hooks/use-geolocation";
 import { GlassCard } from "@/components/ui/glass";
 import type { Pin } from "@/components/map/types";
 
@@ -75,10 +74,12 @@ function LiveMap() {
       tone: "alert" as const,
     }));
 
-  const first = alertPins[0];
+  const first = alertPins[0] || touristPins[0];
   const center: [number, number] = first
     ? [first.lat, first.lng]
-    : [DEFAULT_CENTER.lat, DEFAULT_CENTER.lng];
+    : zones[0]
+      ? [zones[0].center_lat, zones[0].center_lng]
+      : [13.0827, 80.2707];
 
   return (
     <div className="space-y-5">

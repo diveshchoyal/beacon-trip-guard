@@ -76,7 +76,7 @@ const filterOptions: Array<{
 ];
 
 function TouristMap() {
-  const { effective, error } = useGeolocation();
+  const { coords, error } = useGeolocation();
   const [selectedFilter, setSelectedFilter] = useState<SafetyStatus | null>(null);
   const [previewMode, setPreviewMode] = useState<TimePreviewMode>("live");
   const [liveTime, setLiveTime] = useState(() => new Date());
@@ -90,30 +90,32 @@ function TouristMap() {
     return () => clearInterval(timer);
   }, [previewMode]);
 
-  // Compute effective time used for evaluation (real time vs simulated demo time)
+  // Compute effective time based on preview mode
   const effectiveTime = useMemo(() => {
     if (previewMode === "live") return liveTime;
-    const date = new Date(liveTime);
-    const config = previewOptions.find((p) => p.mode === previewMode);
-    if (config?.hour !== undefined) {
-      date.setHours(config.hour, 0, 0, 0);
-    }
-    return date;
+    const opt = previewOptions.find((p) => p.mode === previewMode);
+    if (!opt || opt.hour === undefined) return liveTime;
+    const d = new Date(liveTime);
+    d.setHours(opt.hour, 0, 0, 0);
+    return d;
   }, [previewMode, liveTime]);
 
-  // Calculate dynamic safety counts for filter buttons
+  // Calculate dynamic status counts across all places for selected time
   const statusCounts = useMemo(() => {
-    const counts: Record<SafetyStatus, number> = { safe: 0, caution: 0, restricted: 0 };
+    const counts = { safe: 0, caution: 0, restricted: 0 };
     for (const place of TAMIL_NADU_TOURIST_PLACES) {
-      const ev = evaluatePlaceSafety(place, effectiveTime);
-      counts[ev.status]++;
+      const { status } = evaluatePlaceSafety(place, effectiveTime);
+      counts[status]++;
     }
     return counts;
   }, [effectiveTime]);
 
   const handleFilterClick = (status: SafetyStatus) => {
-    // Single-select toggle: tapping same color clears filter and shows all
-    setSelectedFilter((prev) => (prev === status ? null : status));
+    if (selectedFilter === status) {
+      setSelectedFilter(null);
+    } else {
+      setSelectedFilter(status);
+    }
   };
 
   const handlePreviewSelect = (mode: TimePreviewMode) => {
@@ -123,34 +125,36 @@ function TouristMap() {
     }
   };
 
-  const formattedTime = effectiveTime.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  const activePreviewConfig = previewOptions.find((p) => p.mode === previewMode)!;
+  const formattedTime = previewOptions.find((p) => p.mode === previewMode)?.timeDisplay || "Live";
+  const activePreviewConfig =
+    previewOptions.find((p) => p.mode === previewMode) || previewOptions[0];
 
   return (
-    <div className="relative">
+    <div className="space-y-4">
+      {/* Interactive Map Surface */}
       <GlassCard className="overflow-hidden p-0">
         <div className="relative h-[75vh] min-h-[480px] w-full">
           <BeaconMap
             zones={[]} // Old static geofence zone circles removed in favor of dynamic landmark safety pins
             places={TAMIL_NADU_TOURIST_PLACES}
-            center={TAMIL_NADU_CENTER}
-            zoom={TAMIL_NADU_INITIAL_ZOOM}
+            center={coords ? [coords.lat, coords.lng] : TAMIL_NADU_CENTER}
+            zoom={coords ? 13 : TAMIL_NADU_INITIAL_ZOOM}
             currentTime={effectiveTime}
             selectedStatus={selectedFilter}
-            pins={[
-              {
-                id: "me",
-                lat: effective.lat,
-                lng: effective.lng,
-                label: "You are here",
-                sublabel: "Live GPS Location",
-                tone: "self",
-              },
-            ]}
+            pins={
+              coords
+                ? [
+                    {
+                      id: "me",
+                      lat: coords.lat,
+                      lng: coords.lng,
+                      label: "You are here",
+                      sublabel: "Live GPS Location",
+                      tone: "self",
+                    },
+                  ]
+                : []
+            }
           />
 
           {/* Floating Top Bar (Filter on Left + Time Preview on Right) */}

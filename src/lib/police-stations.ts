@@ -1,5 +1,7 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+
 /**
- * Comprehensive Tamil Nadu & Greater Chennai Police Stations Directory
+ * Comprehensive Police Stations Directory & Live OpenStreetMap Overpass/Places Search
  * Used for real-time proximity calculations, SOS dispatch routing, and safety coverage.
  */
 
@@ -603,6 +605,140 @@ export function calculateDistanceMeters(
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+/** In-memory cache for dynamic police stations query results */
+const policeCache = new Map<string, { stations: PoliceStationRecord[]; timestamp: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Dynamically queries real police stations within 15km of the user's live coordinates
+ * using OpenStreetMap Overpass API, Nominatim, and Photon Places APIs.
+ */
+export async function fetchNearbyPoliceStations(
+  userLat: number,
+  userLng: number,
+): Promise<PoliceStationRecord[]> {
+  if (!userLat || !userLng) return [];
+
+  // Cache key rounded to ~500m precision to prevent redundant network spam
+  const cacheKey = `${userLat.toFixed(2)}_${userLng.toFixed(2)}`;
+  const cached = policeCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS && cached.stations.length > 0) {
+    return cached.stations;
+  }
+
+  const results: PoliceStationRecord[] = [];
+  const seenIds = new Set<string>();
+
+  // 1. Primary: OpenStreetMap Overpass API (Multi-endpoint fallback)
+  const overpassEndpoints = [
+    "https://overpass-api.de/api/interpreter",
+    "https://lz4.overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  ];
+
+  const overpassQuery = `[out:json][timeout:8];(node["amenity"="police"](around:15000,${userLat},${userLng});way["amenity"="police"](around:15000,${userLat},${userLng}););out center 20;`;
+
+  for (const endpoint of overpassEndpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+          "User-Agent": "BeaconTouristSafety/2.0",
+        },
+        body: `data=${encodeURIComponent(overpassQuery)}`,
+        signal: AbortSignal.timeout(4500),
+      });
+
+      if (!res.ok) continue;
+      const data = await res.json();
+
+      if (Array.isArray(data?.elements) && data.elements.length > 0) {
+        for (const el of data.elements) {
+          const lat = el.lat || el.center?.lat;
+          const lng = el.lon || el.center?.lon;
+          if (!lat || !lng) continue;
+
+          const tags = el.tags || {};
+          let name = tags.name || tags["name:en"] || tags.operator || "";
+          if (!name || name.toLowerCase() === "police") {
+            name = "Local Police Station";
+          }
+
+          const id = `osm_${el.type || "node"}_${el.id}`;
+          if (!seenIds.has(id)) {
+            seenIds.add(id);
+            results.push({
+              id,
+              name,
+              lat,
+              lng,
+              division: tags["addr:suburb"] || tags["addr:district"] || "Jurisdiction Precinct",
+              phone: tags.phone || tags["contact:phone"] || "112 / 100",
+              address: tags["addr:street"] || tags["addr:full"] || tags["addr:city"] || undefined,
+            });
+          }
+        }
+
+        if (results.length > 0) {
+          policeCache.set(cacheKey, { stations: results, timestamp: Date.now() });
+          return results;
+        }
+      }
+    } catch {
+      // Try next endpoint
+    }
+  }
+
+  // 2. Secondary fallback: Photon OpenStreetMap Places Search
+  try {
+    const photonUrl = `https://photon.komoot.io/api/?q=police+station&lat=${userLat}&lon=${userLng}&limit=15`;
+    const res = await fetch(photonUrl, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.features) && data.features.length > 0) {
+        for (const f of data.features) {
+          const coords = f.geometry?.coordinates;
+          if (!Array.isArray(coords) || coords.length < 2) continue;
+          const [lng, lat] = coords;
+          const props = f.properties || {};
+
+          let name = props.name || props.street || "";
+          if (!name || name.toLowerCase() === "police") {
+            name = props.city ? `${props.city} Police Station` : "Local Police Station";
+          }
+
+          const id = `photon_${props.osm_id || Math.random().toString(36).substring(7)}`;
+          if (!seenIds.has(id)) {
+            seenIds.add(id);
+            results.push({
+              id,
+              name,
+              lat,
+              lng,
+              division: props.district || props.locality || props.city || "Police Division",
+              phone: "112 / 100",
+              address: [props.street, props.locality, props.city].filter(Boolean).join(", "),
+            });
+          }
+        }
+
+        if (results.length > 0) {
+          policeCache.set(cacheKey, { stations: results, timestamp: Date.now() });
+          return results;
+        }
+      }
+    }
+  } catch {
+    // Secondary fallback failed
+  }
+
+  // 3. Fallback to comprehensive offline directory if completely disconnected
+  return COMPREHENSIVE_POLICE_STATIONS;
+}
+
 /**
  * Finds the nearest police station from user's live coordinates.
  */
@@ -637,4 +773,71 @@ export function findNearestPoliceStation(
     distanceMeters: minDistance,
     distanceFormatted,
   };
+}
+
+/**
+ * Dynamically queries live nearby police stations from OSM Overpass/Photon APIs
+ * and returns the closest station with exact distance calculation.
+ */
+export async function getLiveNearestPoliceStation(
+  userLat: number,
+  userLng: number,
+): Promise<{
+  station: PoliceStationRecord;
+  distanceMeters: number;
+  distanceFormatted: string;
+} | null> {
+  if (!userLat || !userLng) return null;
+
+  const dynamicStations = await fetchNearbyPoliceStations(userLat, userLng);
+  return findNearestPoliceStation(userLat, userLng, dynamicStations);
+}
+
+/**
+ * React hook to automatically fetch, track, and return the genuine nearest police station
+ * dynamically for any user GPS coordinate in real-time.
+ */
+export function useNearbyPolice(lat?: number | null, lng?: number | null) {
+  const [nearestPolice, setNearestPolice] = useState<{
+    station: PoliceStationRecord;
+    distanceMeters: number;
+    distanceFormatted: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const lastQueryRef = useRef<string | null>(null);
+
+  const fetchStation = useCallback(async (targetLat: number, targetLng: number, force = false) => {
+    const key = `${targetLat.toFixed(3)}_${targetLng.toFixed(3)}`;
+    if (!force && lastQueryRef.current === key) return;
+    lastQueryRef.current = key;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getLiveNearestPoliceStation(targetLat, targetLng);
+      setNearestPolice(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch nearby police");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof lat === "number" && typeof lng === "number") {
+      void fetchStation(lat, lng);
+    } else {
+      setNearestPolice(null);
+      setLoading(false);
+    }
+  }, [lat, lng, fetchStation]);
+
+  const refetch = useCallback(() => {
+    if (typeof lat === "number" && typeof lng === "number") {
+      void fetchStation(lat, lng, true);
+    }
+  }, [lat, lng, fetchStation]);
+
+  return { nearestPolice, loading, error, refetch };
 }

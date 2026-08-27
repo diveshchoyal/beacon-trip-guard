@@ -38,6 +38,7 @@ import {
   COMPREHENSIVE_POLICE_STATIONS,
   type PoliceStationRecord,
   findNearestPoliceStation,
+  useNearbyPolice,
 } from "@/lib/police-stations";
 
 export const Route = createFileRoute("/_authenticated/app/")({
@@ -122,55 +123,21 @@ function TouristHome() {
     },
   });
 
-  // Load police stations from Supabase (merged with comprehensive verified dataset)
-  const { data: dbPoliceStations = [] } = useQuery({
-    queryKey: ["police-stations"],
-    queryFn: async () => {
-      const { data, error: e } = await supabase
-        .from("police_stations")
-        .select("id, name, lat, lng");
-      if (e) return [];
-      return data ?? [];
-    },
-  });
-
-  const allPoliceStations = useMemo(() => {
-    if (dbPoliceStations.length === 0) return COMPREHENSIVE_POLICE_STATIONS;
-    // Prioritize high-precision comprehensive stations and augment with any custom DB records
-    const knownNames = new Set(
-      COMPREHENSIVE_POLICE_STATIONS.map((s) => s.name.toLowerCase().trim()),
-    );
-    const merged = [...COMPREHENSIVE_POLICE_STATIONS];
-    for (const dbSt of dbPoliceStations) {
-      if (!knownNames.has(dbSt.name.toLowerCase().trim())) {
-        merged.push({
-          id: dbSt.id,
-          name: dbSt.name,
-          lat: dbSt.lat,
-          lng: dbSt.lng,
-          division: "Local Police Station",
-        });
-      }
-    }
-    return merged;
-  }, [dbPoliceStations]);
-
-  // Real-time calculation of nearest police station to current authoritative GPS
-  const nearestPolice = useMemo(() => {
-    if (geoStatus === "denied" || allPoliceStations.length === 0) return null;
-    const targetLoc = coords ?? effective;
-    if (!targetLoc) return null;
-
-    return findNearestPoliceStation(targetLoc.lat, targetLoc.lng, allPoliceStations);
-  }, [allPoliceStations, coords, effective, geoStatus]);
+  // Dynamic real-time OSM Overpass/Places nearest police discovery
+  const {
+    nearestPolice,
+    loading: policeLoading,
+    refetch: refetchPolice,
+  } = useNearbyPolice(coords?.lat, coords?.lng);
 
   // Formatted sensible distance string for nearest police
   const policeDistanceLabel = useMemo(() => {
-    if (geoStatus === "locating" && !coords) return "Finding...";
     if (geoStatus === "denied") return "Location Required";
+    if (geoStatus === "error") return "Unavailable";
+    if (geoStatus === "locating" || policeLoading) return "Finding...";
     if (!nearestPolice) return "Unavailable";
     return nearestPolice.distanceFormatted;
-  }, [nearestPolice, geoStatus, coords]);
+  }, [nearestPolice, geoStatus, policeLoading]);
 
   // Query unread alerts count
   const { data: unreadAlertsCount = 0 } = useQuery({
@@ -718,7 +685,10 @@ function TouristHome() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={requestLocation}
+                    onClick={() => {
+                      requestLocation();
+                      refetchPolice();
+                    }}
                     className="flex items-center gap-1 text-[10px] font-bold text-[#FF6F61] hover:underline cursor-pointer"
                     title="Refresh live GPS coordinates"
                   >
@@ -734,6 +704,11 @@ function TouristHome() {
                     <span className="flex items-center gap-1 text-[10px] font-bold text-[#F2A93B] uppercase tracking-wider">
                       <span className="h-2 w-2 rounded-full bg-[#F2A93B] animate-pulse" />
                       DETECTING
+                    </span>
+                  ) : geoStatus === "denied" ? (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[#E94B5F] uppercase tracking-wider">
+                      <span className="h-2 w-2 rounded-full bg-[#E94B5F]" />
+                      DISABLED
                     </span>
                   ) : (
                     <span className="text-[10px] font-bold text-[#77716D] uppercase tracking-wider">
@@ -761,7 +736,7 @@ function TouristHome() {
                       Latitude
                     </span>
                     <span className="font-mono font-bold text-[#1E1E1E]">
-                      {effective?.lat ? `${effective.lat.toFixed(4)}° N` : "—"}
+                      {coords?.lat ? `${coords.lat.toFixed(4)}° N` : "—"}
                     </span>
                   </div>
                   <div>
@@ -769,16 +744,31 @@ function TouristHome() {
                       Longitude
                     </span>
                     <span className="font-mono font-bold text-[#1E1E1E]">
-                      {effective?.lng ? `${effective.lng.toFixed(4)}° E` : "—"}
+                      {coords?.lng ? `${coords.lng.toFixed(4)}° E` : "—"}
                     </span>
                   </div>
                 </div>
-                {typeof accuracy === "number" && (
+                {typeof accuracy === "number" && coords && (
                   <p className="text-[10px] text-right font-medium text-[#77716D] pr-1">
                     GPS Accuracy: ±{Math.round(accuracy)}m
                   </p>
                 )}
               </div>
+
+              {/* Retry button for permission denied or error states */}
+              {(geoStatus === "denied" || geoStatus === "error") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    requestLocation();
+                    refetchPolice();
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-[#FF6F61]/10 border border-[#FF6F61]/25 py-2 text-xs font-bold text-[#FF6F61] hover:bg-[#FF6F61]/20 transition-all cursor-pointer"
+                >
+                  <Radio className="h-3.5 w-3.5 animate-pulse" />
+                  <span>{geoStatus === "denied" ? "Retry Permission" : "Retry GPS Fix"}</span>
+                </button>
+              )}
 
               {/* View on Map CTA Button */}
               <Link
@@ -896,7 +886,7 @@ function TouristHome() {
           </div>
         </div>
 
-        {/* Card 3: NEARBY POLICE (Real Calculated Distance from Central GPS) */}
+        {/* Card 3: NEARBY POLICE (Real Calculated Distance from Dynamic GPS) */}
         <div className="rounded-3xl border border-[#F6B28F]/30 bg-white/90 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#77716D]">
@@ -908,11 +898,15 @@ function TouristHome() {
           </div>
           <p className="mt-2 text-lg sm:text-xl font-black text-[#1E1E1E]">{policeDistanceLabel}</p>
           <p className="mt-0.5 text-xs text-blue-600 font-bold truncate">
-            {geoStatus === "locating" && !coords
-              ? "Finding nearby police..."
-              : nearestPolice
-                ? `${nearestPolice.station.name} · Open 24/7`
-                : "Police data unavailable"}
+            {geoStatus === "denied"
+              ? "Enable GPS to find police"
+              : geoStatus === "error"
+                ? "GPS signal lost"
+                : geoStatus === "locating" || policeLoading
+                  ? "Finding nearby police..."
+                  : nearestPolice
+                    ? `${nearestPolice.station.name} · Open 24/7`
+                    : "No police stations nearby"}
           </p>
         </div>
 

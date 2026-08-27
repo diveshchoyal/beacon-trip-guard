@@ -2,52 +2,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 
 export type Coords = { lat: number; lng: number };
 
-/** Chennai, India — default map centre fallback: Tondiarpet, Chennai 600081 */
-export const DEFAULT_CENTER: Coords = { lat: 13.1258, lng: 80.2892 };
-
-export const LOCATION_PRESETS: Array<{
-  id: string;
-  name: string;
-  area: string;
-  pincode: string;
-  coords: Coords;
-}> = [
-  {
-    id: "tondiarpet",
-    name: "Tondiarpet (Near Murugesan St / Market)",
-    area: "Tondiarpet",
-    pincode: "600081",
-    coords: { lat: 13.1258, lng: 80.2892 },
-  },
-  {
-    id: "marina",
-    name: "Marina Beach Promenade",
-    area: "Triplicane",
-    pincode: "600005",
-    coords: { lat: 13.05, lng: 80.2824 },
-  },
-  {
-    id: "central",
-    name: "Chennai Central Station",
-    area: "Park Town",
-    pincode: "600003",
-    coords: { lat: 13.0827, lng: 80.2707 },
-  },
-  {
-    id: "mylapore",
-    name: "Mylapore Heritage Zone",
-    area: "Mylapore",
-    pincode: "600004",
-    coords: { lat: 13.0337, lng: 80.2678 },
-  },
-  {
-    id: "besantnagar",
-    name: "Besant Nagar / Elliot's Beach",
-    area: "Besant Nagar",
-    pincode: "600090",
-    coords: { lat: 12.9988, lng: 80.2717 },
-  },
-];
 export type GeoStatus = "locating" | "success" | "denied" | "error";
 
 export interface ReverseGeocodeResult {
@@ -58,9 +12,11 @@ export interface ReverseGeocodeResult {
 
 /** Cleans administrative prefixes / suffixes from OpenStreetMap / Nominatim */
 function cleanAreaName(str: string): string {
+  if (!str) return "";
   return str
     .replace(/^Zone\s*\d+\s*/i, "")
     .replace(/\s*Corporation$/i, "")
+    .replace(/\s*City Corporation$/i, "")
     .replace(/\s*District$/i, "")
     .trim();
 }
@@ -70,7 +26,7 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
   // 1. Primary: High-speed Photon OpenStreetMap Reverse Geocoding
   try {
     const photonUrl = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`;
-    const res = await fetch(photonUrl, { signal: AbortSignal.timeout(3500) });
+    const res = await fetch(photonUrl, { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
       const data = await res.json();
       const props = data?.features?.[0]?.properties;
@@ -78,12 +34,13 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
         const road = props.name || props.street || "";
         const district = props.district ? cleanAreaName(props.district) : "";
         const locality = props.locality ? cleanAreaName(props.locality) : "";
-        const city = props.city ? cleanAreaName(props.city) : "Chennai";
+        const city = cleanAreaName(props.city || props.town || props.village || props.county || "");
         const postcode = props.postcode || "";
-        const state = props.state || "Tamil Nadu";
+        const state = props.state || "";
+        const country = props.country || "";
 
-        const neighborhood = district || locality || "";
-        const cityArea = neighborhood || city;
+        const neighborhood = locality || district || "";
+        const cityArea = neighborhood || city || road || `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`;
 
         let formattedAddress = "";
         if (road && neighborhood) {
@@ -92,11 +49,22 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
           formattedAddress = `${neighborhood}, ${city}${postcode ? ` ${postcode}` : ""}`;
         } else if (road && city) {
           formattedAddress = `${road}, ${city}${postcode ? ` ${postcode}` : ""}`;
+        } else if (cityArea) {
+          formattedAddress = `${cityArea}${state ? `, ${state}` : ""}${postcode ? ` ${postcode}` : ""}`;
         } else {
-          formattedAddress = `${neighborhood || city}, ${state}${postcode ? ` ${postcode}` : ""}`;
+          formattedAddress = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
         }
 
-        const stateCountry = postcode ? `${city} ${postcode}, ${state}` : `${city}, ${state}`;
+        let stateCountry = "";
+        if (city && state) {
+          stateCountry = postcode ? `${city} ${postcode}, ${state}` : `${city}, ${state}`;
+        } else if (state && country) {
+          stateCountry = `${state}, ${country}`;
+        } else if (city || state || country) {
+          stateCountry = [city, state, country].filter(Boolean).join(", ");
+        } else {
+          stateCountry = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
+        }
 
         return { formattedAddress, cityArea, stateCountry };
       }
@@ -111,8 +79,9 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
     const res = await fetch(bdcUrl, { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
       const data = await res.json();
-      const city = data?.city ? cleanAreaName(data.city) : "Chennai";
-      const state = data?.principalSubdivision || "Tamil Nadu";
+      const city = cleanAreaName(data?.city || data?.locality || "");
+      const state = data?.principalSubdivision || "";
+      const country = data?.countryName || "";
       const postcode = data?.postcode || "";
 
       let neighborhood = "";
@@ -122,10 +91,9 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
           const item = adminList[i];
           if (
             item?.name &&
-            item.name.toLowerCase() !== "india" &&
-            item.name.toLowerCase() !== "tamil nadu" &&
-            item.name.toLowerCase() !== "chennai" &&
-            item.name.toLowerCase() !== "chennai district"
+            item.name.toLowerCase() !== country.toLowerCase() &&
+            item.name.toLowerCase() !== state.toLowerCase() &&
+            item.name.toLowerCase() !== city.toLowerCase()
           ) {
             neighborhood = cleanAreaName(item.name);
             break;
@@ -133,8 +101,14 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
         }
       }
 
-      const cityArea = neighborhood || (data?.locality ? cleanAreaName(data.locality) : city);
-      const stateCountry = postcode ? `${city} ${postcode}, ${state}` : `${city}, ${state}`;
+      const cityArea =
+        neighborhood ||
+        (data?.locality ? cleanAreaName(data.locality) : city) ||
+        `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`;
+      const stateCountry =
+        city && state
+          ? `${city}${postcode ? ` ${postcode}` : ""}, ${state}`
+          : [state, country].filter(Boolean).join(", ");
       const formattedAddress = neighborhood
         ? `${neighborhood}, ${city}${postcode ? ` ${postcode}` : ""}`
         : `${cityArea}, ${stateCountry}`;
@@ -156,33 +130,40 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
       const data = await res.json();
       const addr = data?.address || {};
       const road =
-        addr.road || addr.pedestrian || addr.street || addr.path || addr.footway || addr.lane;
+        addr.road || addr.pedestrian || addr.street || addr.path || addr.footway || addr.lane || "";
       const suburbRaw =
         addr.suburb ||
         addr.neighbourhood ||
         addr.residential ||
         addr.city_district ||
         addr.subdistrict ||
-        addr.quarter;
+        addr.quarter ||
+        "";
       const cityRaw =
-        addr.city || addr.town || addr.municipality || addr.county || addr.state_district;
-      const state = addr.state || "Tamil Nadu";
+        addr.city || addr.town || addr.municipality || addr.county || addr.state_district || "";
+      const state = addr.state || "";
+      const country = addr.country || "";
       const postcode = addr.postcode || "";
 
       const suburb = suburbRaw ? cleanAreaName(suburbRaw) : "";
-      const city = cityRaw ? cleanAreaName(cityRaw) : "Chennai";
+      const city = cityRaw ? cleanAreaName(cityRaw) : "";
 
       let formattedAddress = "";
       if (road && suburb) {
         formattedAddress = `${road}, ${suburb}${postcode ? ` - ${postcode}` : ""}`;
       } else if (suburb && city) {
         formattedAddress = `${suburb}, ${city}${postcode ? ` ${postcode}` : ""}`;
+      } else if (road && city) {
+        formattedAddress = `${road}, ${city}${postcode ? ` ${postcode}` : ""}`;
       } else {
-        formattedAddress = `${suburb || city}, ${state}`;
+        formattedAddress = [suburb || city, state, country].filter(Boolean).join(", ");
       }
 
-      const cityArea = suburb || city || "Chennai";
-      const stateCountry = postcode ? `${city} ${postcode}, ${state}` : `${city}, ${state}`;
+      const cityArea = suburb || city || road || `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`;
+      const stateCountry =
+        city && state
+          ? `${city}${postcode ? ` ${postcode}` : ""}, ${state}`
+          : [state, country].filter(Boolean).join(", ");
 
       return { formattedAddress, cityArea, stateCountry };
     }
@@ -192,8 +173,8 @@ export async function fetchReverseGeocode(lat: number, lng: number): Promise<Rev
 
   return {
     formattedAddress: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`,
-    cityArea: "Tondiarpet",
-    stateCountry: "Chennai 600081, Tamil Nadu",
+    cityArea: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`,
+    stateCountry: "Live Coordinates Detected",
   };
 }
 
@@ -208,16 +189,16 @@ export function useGeolocation() {
   const [geocodedAddress, setGeocodedAddress] = useState<ReverseGeocodeResult | null>(null);
   const lastGeocodedCoordsRef = useRef<Coords | null>(null);
   const isGeocodingRef = useRef(false);
-
   const coordsRef = useRef<Coords | null>(null);
 
   // Manual request / refresh trigger for live GPS
   const requestLocation = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setError("Location is not available on this device.");
+      setError("Location services are not supported on this browser.");
       setGeoStatus("error");
       return;
     }
+
     setGeoStatus("locating");
     setError(null);
 
@@ -233,28 +214,37 @@ export function useGeolocation() {
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
-          setError("Location permission denied.");
+          setError("Location permission denied. Please allow GPS access in your browser.");
           setGeoStatus("denied");
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          setError(
+            "GPS satellite position unavailable. Please check your device location settings.",
+          );
+          setGeoStatus("error");
+        } else if (err.code === err.TIMEOUT) {
+          setError("GPS location request timed out. Tap retry to acquire signal again.");
+          setGeoStatus("error");
         } else {
-          setError("Unable to determine location.");
+          setError("Unable to determine live location.");
           setGeoStatus("error");
         }
       },
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 12_000, maximumAge: 0 },
     );
   }, []);
 
-  // Continuous real-time automatic GPS tracking watcher
+  // Automatic GPS detection on mount & continuous live watching
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setError("Location is not available on this device.");
+      setError("Location services are not supported on this browser.");
       setGeoStatus("error");
       return;
     }
 
     setGeoStatus("locating");
 
-    const id = navigator.geolocation.watchPosition(
+    // 1. Initial immediate position query
+    navigator.geolocation.getCurrentPosition(
       (pos) => {
         const newCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         coordsRef.current = newCoords;
@@ -266,41 +256,61 @@ export function useGeolocation() {
       },
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
-          setError("Location permission denied.");
+          setError("Location permission denied. Please allow GPS access in your browser.");
           setGeoStatus("denied");
         } else {
-          setError("Unable to determine location.");
+          setError("Unable to determine live location.");
           setGeoStatus("error");
         }
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 12_000 },
+      { enableHighAccuracy: true, timeout: 12_000, maximumAge: 0 },
     );
 
-    return () => navigator.geolocation.clearWatch(id);
-  }, []);
+    // 2. Continuous position watcher
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const newCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        coordsRef.current = newCoords;
+        setCoords(newCoords);
+        setAccuracy(pos.coords.accuracy);
+        setTimestamp(pos.timestamp);
+        setError(null);
+        setGeoStatus("success");
+      },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          setError("Location permission denied. Please allow GPS access in your browser.");
+          setGeoStatus("denied");
+        } else if (!coordsRef.current) {
+          setError("Unable to determine live location.");
+          setGeoStatus("error");
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
+    );
 
-  // Single authoritative coordinate value (live GPS coords > default center)
-  const effective: Coords = coords ?? DEFAULT_CENTER;
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
 
   // Trigger real-time reverse geocoding on live GPS coordinate updates
   useEffect(() => {
-    if (isGeocodingRef.current) return;
+    if (!coords || isGeocodingRef.current) return;
 
     const last = lastGeocodedCoordsRef.current;
     if (last) {
-      const movedMeters = distanceMeters(last, effective);
-      // Don't re-query if movement is under 15 meters
-      if (movedMeters < 15) return;
+      const movedMeters = distanceMeters(last, coords);
+      // Don't re-query if movement is under 20 meters
+      if (movedMeters < 20) return;
     }
 
     let active = true;
     isGeocodingRef.current = true;
 
-    void fetchReverseGeocode(effective.lat, effective.lng).then((res) => {
+    void fetchReverseGeocode(coords.lat, coords.lng).then((res) => {
       isGeocodingRef.current = false;
       if (active) {
         setGeocodedAddress(res);
-        lastGeocodedCoordsRef.current = { lat: effective.lat, lng: effective.lng };
+        lastGeocodedCoordsRef.current = { lat: coords.lat, lng: coords.lng };
       }
     });
 
@@ -308,18 +318,18 @@ export function useGeolocation() {
       active = false;
       isGeocodingRef.current = false;
     };
-  }, [effective]);
+  }, [coords]);
 
-  // Human-readable dynamic titles and sublabels matching requirements
+  // Dynamic status text, titles, and sublabels
   let locationTitle = "Detecting your location...";
-  let locationSublabel = "Location tracked live via GPS";
+  let locationSublabel = "Acquiring live GPS satellite signal...";
 
   if (geoStatus === "denied") {
     locationTitle = "Location permission required";
-    locationSublabel = "Enable GPS in browser settings";
+    locationSublabel = "Please enable GPS access in browser settings";
   } else if (geoStatus === "error") {
     locationTitle = "Unable to determine location";
-    locationSublabel = "GPS satellite signal lost";
+    locationSublabel = error || "GPS satellite signal lost. Tap retry to reconnect.";
   } else if (geoStatus === "locating" && !coords) {
     locationTitle = "Detecting your location...";
     locationSublabel = "Searching for GPS satellite signal...";
@@ -331,8 +341,25 @@ export function useGeolocation() {
     locationSublabel = "Location tracked live via GPS";
   }
 
-  const cityArea = geocodedAddress?.cityArea || (coords ? "Tondiarpet" : "Tondiarpet");
-  const stateCountry = geocodedAddress?.stateCountry || "Chennai 600081, Tamil Nadu";
+  const cityArea =
+    geocodedAddress?.cityArea ||
+    (coords
+      ? `${coords.lat.toFixed(4)}° N, ${coords.lng.toFixed(4)}° E`
+      : geoStatus === "denied"
+        ? "Permission Denied"
+        : geoStatus === "error"
+          ? "Location Unavailable"
+          : "Detecting...");
+
+  const stateCountry =
+    geocodedAddress?.stateCountry ||
+    (coords
+      ? "Live GPS Coordinates"
+      : geoStatus === "denied"
+        ? "GPS disabled in browser"
+        : geoStatus === "error"
+          ? "GPS signal lost"
+          : "Acquiring GPS fix...");
 
   return {
     coords,
@@ -341,7 +368,7 @@ export function useGeolocation() {
     error,
     geoStatus,
     isLocating: geoStatus === "locating" && !coords,
-    effective,
+    effective: coords,
     locationTitle,
     locationSublabel,
     cityArea,

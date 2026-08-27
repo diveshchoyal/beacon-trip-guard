@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 
 export type Coords = { lat: number; lng: number };
 
+export const DEFAULT_CENTER: Coords = { lat: 13.0827, lng: 80.2707 };
+
 export type GeoStatus = "locating" | "success" | "denied" | "error";
 
 export interface ReverseGeocodeResult {
@@ -368,7 +370,7 @@ export function useGeolocation() {
     error,
     geoStatus,
     isLocating: geoStatus === "locating" && !coords,
-    effective: coords,
+    effective: coords ?? DEFAULT_CENTER,
     locationTitle,
     locationSublabel,
     cityArea,

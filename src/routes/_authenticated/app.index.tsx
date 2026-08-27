@@ -339,6 +339,40 @@ function TouristHome() {
     }
   }, [geoStatus, coords, currentZone, unreadAlertsCount, crowdLevel, weatherData, nearestPolice]);
 
+  // Real Dynamic Safety Score Calculation (0 - 100)
+  const liveSafetyScore = useMemo(() => {
+    let score = 96; // Optimal baseline in safe conditions
+
+    // 1. Geofence zone risk signal
+    if (currentZone?.risk_level === "restricted") score -= 35;
+    else if (currentZone?.risk_level === "caution") score -= 18;
+
+    // 2. Active alerts in area
+    if (unreadAlertsCount >= 3) score -= 30;
+    else if (unreadAlertsCount >= 1) score -= 15;
+
+    // 3. Crowd density factor from CrowdX YOLO
+    if (crowdLevel === "Very Busy") score -= 15;
+    else if (crowdLevel === "Busy") score -= 8;
+
+    // 4. Weather severity factor
+    if (
+      weatherData &&
+      (weatherData.weatherCode >= 95 ||
+        weatherData.weatherCode === 65 ||
+        weatherData.weatherCode === 82)
+    ) {
+      score -= 15;
+    }
+
+    // 5. Police proximity buffer
+    if (nearestPolice && nearestPolice.distanceMeters > 5000) {
+      score -= 8;
+    }
+
+    return Math.max(15, Math.min(100, Math.round(score)));
+  }, [currentZone, unreadAlertsCount, crowdLevel, weatherData, nearestPolice]);
+
   // Persist location ping every 2 minutes for responders
   useEffect(() => {
     if (!user || !coords) return;
@@ -602,41 +636,111 @@ function TouristHome() {
             </div>
           </div>
 
-          {/* Center 3D Mascot Character on 3D Earth Globe (4 Cols) */}
-          <div className="lg:col-span-4 relative flex flex-col items-center justify-center py-4 select-none">
-            {/* Soft Ambient Atmosphere behind Globe (No wireframe lines) */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="h-56 w-56 sm:h-64 sm:w-64 rounded-full bg-gradient-to-br from-[#FF6F61]/10 via-[#F6B28F]/15 to-transparent blur-2xl" />
+          {/* Center Mascot Character + Live Circular Safety Score Gauge (4 Cols) */}
+          <div className="lg:col-span-4 relative flex flex-col items-center justify-center py-2 select-none">
+            {/* Live Circular Safety Score Gauge Badge */}
+            <div className="relative mb-3 flex items-center gap-3 rounded-2xl border border-[#F6B28F]/35 bg-white/95 px-3.5 py-2 shadow-md backdrop-blur-md">
+              <div className="relative flex h-11 w-11 items-center justify-center shrink-0">
+                <svg className="h-11 w-11 -rotate-90 transform" viewBox="0 0 48 48">
+                  {/* Background Circle Track */}
+                  <circle
+                    cx="24"
+                    cy="24"
+                    r="18"
+                    className="stroke-black/5"
+                    strokeWidth="3.5"
+                    fill="none"
+                  />
+                  {/* Active Progress Ring */}
+                  <circle
+                    cx="24"
+                    cy="24"
+                    r="18"
+                    stroke={
+                      liveSafetyScore >= 85
+                        ? "#39B86B"
+                        : liveSafetyScore >= 65
+                          ? "#F2A93B"
+                          : "#E94B5F"
+                    }
+                    strokeWidth="3.5"
+                    strokeDasharray={2 * Math.PI * 18}
+                    strokeDashoffset={2 * Math.PI * 18 * (1 - liveSafetyScore / 100)}
+                    strokeLinecap="round"
+                    fill="none"
+                    className="transition-all duration-700 ease-out"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-[13px] font-black text-[#1E1E1E] leading-none">
+                    {liveSafetyScore}
+                  </span>
+                  <span className="text-[7px] font-black uppercase text-[#77716D] leading-none mt-0.5">
+                    /100
+                  </span>
+                </div>
+              </div>
+              <div className="text-left pr-1">
+                <div className="flex items-center gap-1">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      liveSafetyScore >= 85
+                        ? "bg-[#39B86B] animate-ping"
+                        : liveSafetyScore >= 65
+                          ? "bg-[#F2A93B] animate-pulse"
+                          : "bg-[#E94B5F] animate-pulse"
+                    }`}
+                  />
+                  <span className="text-[9px] font-black uppercase tracking-wider text-[#FF6F61]">
+                    LIVE SAFETY SCORE
+                  </span>
+                </div>
+                <p className="text-xs font-black text-[#1E1E1E]">
+                  {liveSafetyScore >= 85
+                    ? "Optimal · Safe Area"
+                    : liveSafetyScore >= 65
+                      ? "Moderate Caution"
+                      : "Elevated Risk"}
+                </p>
+              </div>
             </div>
 
-            {/* Synchronized Soft Ground Shadow */}
-            <motion.div
-              animate={{
-                scale: [1, 0.94, 1],
-                opacity: [0.28, 0.18, 0.28],
-              }}
-              transition={{
-                repeat: Infinity,
-                duration: 6,
-                ease: "easeInOut",
-              }}
-              className="absolute bottom-2 left-1/2 -translate-x-1/2 h-5 w-32 rounded-full bg-[#FF6F61]/20 blur-md pointer-events-none"
-            />
+            {/* Mascot Container with Ambient Glow & Breathing Animation */}
+            <div className="relative flex flex-col items-center justify-center">
+              {/* Soft Ambient Glow */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="h-44 w-44 rounded-full bg-gradient-to-br from-[#FF6F61]/10 via-[#F6B28F]/15 to-transparent blur-2xl" />
+              </div>
 
-            {/* Stable, Natural 3D Tourist Character on 3D Earth Globe */}
-            <motion.img
-              src={mascotImg}
-              alt="BEACON 3D Tourist on Earth Globe"
-              animate={{
-                y: [0, -4, 0],
-              }}
-              transition={{
-                repeat: Infinity,
-                duration: 6,
-                ease: "easeInOut",
-              }}
-              className="relative z-10 h-60 sm:h-68 lg:h-76 w-auto object-contain drop-shadow-2xl"
-            />
+              {/* Synchronized Soft Ground Shadow */}
+              <motion.div
+                animate={{
+                  scale: [1, 0.94, 1],
+                  opacity: [0.28, 0.18, 0.28],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 6,
+                  ease: "easeInOut",
+                }}
+                className="absolute bottom-1 left-1/2 -translate-x-1/2 h-3.5 w-28 rounded-full bg-[#FF6F61]/20 blur-md pointer-events-none"
+              />
+
+              {/* Clean Flat-Style Mascot Illustration */}
+              <motion.img
+                src={mascotImg}
+                alt="BEACON Tourist Mascot"
+                animate={{
+                  y: [0, -4, 0],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 6,
+                  ease: "easeInOut",
+                }}
+                className="relative z-10 h-52 sm:h-60 lg:h-64 w-auto object-contain drop-shadow-md"
+              />
+            </div>
           </div>
 
           {/* Right Column: Floating Live Location & Coordinates Card (3 Cols) */}
